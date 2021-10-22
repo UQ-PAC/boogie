@@ -896,6 +896,16 @@ namespace Microsoft.Boogie
 
       #endregion
 
+
+      #region Infer invariants using craig interpolant
+
+      if (CommandLineOptions.Clo.InferInvariantsInterpolant) {
+        Microsoft.Boogie.InvariantInference.InvariantInference.RunInvariantInference(program);
+      }
+
+      #endregion
+        
+
       #region Do some post-abstract-interpretation preprocessing on the program (e.g., loop unrolling)
 
       if (CommandLineOptions.Clo.LoopUnrollCount != -1)

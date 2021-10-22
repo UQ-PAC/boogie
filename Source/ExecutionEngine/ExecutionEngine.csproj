@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Model\Model.csproj" />
     <ProjectReference Include="..\Predication\Predication.csproj" />
     <ProjectReference Include="..\VCGeneration\VCGeneration.csproj" />
+    <ProjectReference Include="..\InvariantInference\InvariantInference.csproj" />
   </ItemGroup>
 
 </Project>

@@ -4,6 +4,7 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Diagnostics.Contracts;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace Microsoft.Boogie
@@ -797,6 +798,7 @@ namespace Microsoft.Boogie
     }
 
     public bool UseAbstractInterpretation  { get; set; } = false;
+    public bool InferInvariantsInterpolant { get; set; } = false;
 
     public string CivlDesugaredFile  { get; set; } = null;
 
@@ -1011,6 +1013,14 @@ namespace Microsoft.Boogie
       var args = ps.args; // convenient synonym
       switch (name)
       {
+        case "inferfib":
+          if (ps.ConfirmArgumentCount(0)) {
+            InferInvariantsInterpolant = true;
+            Debug.Print("inferring invariants");
+          }
+
+          return true;
+
         case "infer":
           if (ps.ConfirmArgumentCount(1))
           {
