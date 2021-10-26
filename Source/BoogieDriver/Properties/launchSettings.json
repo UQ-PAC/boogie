@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "BoogieDriver": {
+      "commandName": "Project",
+      "commandLineArgs": "\"test/test.bpl\"",
+      "workingDirectory": "D:\\work\\repos\\boogie\\Source"
+    }
+  }
+}

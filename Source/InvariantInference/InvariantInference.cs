@@ -73,8 +73,10 @@ namespace Microsoft.Boogie.InvariantInference {
       List<List<Block>> paths;
     }
 
+
     private static VCExpr weakestPrecondition(Cmd cmd, VCExpr Q) {
-      VCExpressionGenerator gen = new VCExpressionGenerator;
+      /*
+      VCExpressionGenerator gen = new VCExpressionGenerator();
       if (cmd is AssertCmd) {
         return gen.AndSimp()
       } else if (cmd is AssumeCmd) {
@@ -85,7 +87,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
       } else {
         Debug.Print("error: unimplemented command for WP: " + cmd.ToString());
-      }
+      } */
       return null;
     }
 
