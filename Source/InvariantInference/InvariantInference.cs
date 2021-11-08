@@ -125,7 +125,7 @@ namespace Microsoft.Boogie.InvariantInference {
           assignments.Add(lhsPred, rhsPred);
         }
 
-        VCExprSubstitution subst = new VCExprSubstitution(assignments , new Dictionary<TypeVariable, Type)());
+        VCExprSubstitution subst = new VCExprSubstitution(assignments , new Dictionary<TypeVariable, Type>());
         SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
         VCExpr substQ = substituter.Mutate(Q, subst);
 
@@ -200,7 +200,7 @@ namespace Microsoft.Boogie.InvariantInference {
         return sp;
       } else {
         Debug.Print("error: unimplemented command for WP: " + cmd.ToString());
-      } */
+      }
       return null;
     }
 
