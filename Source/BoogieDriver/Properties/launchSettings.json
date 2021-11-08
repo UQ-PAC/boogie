@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "BoogieDriver": {
+      "commandName": "Project",
+      "commandLineArgs": "/traceverify test/test.bpl",
+      "workingDirectory": "D:\\Work\\boogie\\Source"
+    }
+  }
+}
