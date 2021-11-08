@@ -200,7 +200,7 @@ namespace Microsoft.Boogie.InvariantInference {
         return sp;
       } else {
         Debug.Print("error: unimplemented command for WP: " + cmd.ToString());
-      }
+      } */
       return null;
     }
 
