@@ -4,8 +4,10 @@ procedure test() {
   x := 0;
   y := 0;
   while (x != n) {
-    x := x + 1;
-    y := y + 1;
+    if (x == 1) {
+      x := x + 1;
+      y := y + 1;
+    }
   }
   assert (y == n);
 }

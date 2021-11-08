@@ -71,6 +71,50 @@ namespace Microsoft.Boogie.InvariantInference {
       return end;
     }
 
+    private static List<List<Block>> getTracesForward(Block start, Block end) {
+      List<List<Block>> paths = new List<List<Block>>();
+      paths.Add(new List<Block>());
+      DoDFSVisit(start, end, paths);
+      return paths;
+    }
+
+    private static List<List<Block>> getTracesBackward(Block start, Block end) {
+
+
+      return null;
+    }
+
+    private static void DoDFSVisit(Block block, Block target, List<List<Block>> paths) {
+
+      // case 1. We visit the target => We are done
+
+      if (block == target) {
+        paths.Last().Add(target);
+        return;
+      }
+
+      // case 2. We visit a node that ends with a return => path does not reach target
+
+      if (block.TransferCmd is ReturnCmd) {
+        paths.Remove(paths.Last());
+        return;
+      }
+
+      // case 3. We visit a node with successors => continue the exploration of its successors
+
+      GotoCmd successors = (GotoCmd)block.TransferCmd;
+
+      if (successors.labelTargets != null) {
+        foreach (Block nextBlock in successors.labelTargets) {
+          // Otherwise we perform the DFS visit
+          paths.Last().Add(nextBlock);
+          DoDFSVisit(nextBlock, target, paths);
+
+          // need to move to next list for further iteration
+        }
+      }
+    }
+
     private static void getPostCondition(Block end, Block loopHead) {
       List<List<Block>> traces;
     }
