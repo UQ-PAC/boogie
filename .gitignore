@@ -38,3 +38,4 @@ Source/*.userprefs
 
 # Rider files
 .idea/
+/Source/BoogieDriver/Properties/launchSettings.json

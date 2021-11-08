@@ -12,6 +12,12 @@ namespace Microsoft.Boogie.InvariantInference {
       // find back edges
       WidenPoints.Compute(program);
       Dictionary<Procedure, Implementation[]> procedureImplementations = ComputeProcImplMap(program);
+      VCExpressionGenerator gen = new VCExpressionGenerator();
+      List<string> proverCommands = new List<string>();
+      proverCommands.Add("smtlib");
+      proverCommands.Add("z3");
+      VCGenerationOptions genOptions = new VCGenerationOptions(proverCommands);
+      Boogie2VCExprTranslator translator = new Boogie2VCExprTranslator(gen, genOptions);
 
       // analyze each procedure
       foreach (var proc in program.Procedures) {
@@ -32,7 +38,7 @@ namespace Microsoft.Boogie.InvariantInference {
                   foreach (Block l in loopBody) {
                     Debug.Print(l.ToString());
                   }
-                  InferLoopInvariant(program, procedureImplementations, impl, b);
+                  InferLoopInvariant(program, procedureImplementations, impl, b, gen, translator);
                 }
               }
             }
@@ -41,7 +47,8 @@ namespace Microsoft.Boogie.InvariantInference {
       }
     }
 
-    private static void InferLoopInvariant(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead) {
+    private static void InferLoopInvariant(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
+      VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
       Block start = impl.Blocks[0];
       Debug.Print("start block: " + start.ToString());
       Block end = getEndBlock(impl);
@@ -65,24 +72,132 @@ namespace Microsoft.Boogie.InvariantInference {
     }
 
     private static void getPostCondition(Block end, Block loopHead) {
-      List<List<Block>> paths;
-
+      List<List<Block>> traces;
     }
 
     private static void getPreCondition(Block start, Block loopHead) {
-      List<List<Block>> paths;
+      List<List<Block>> traces;
     }
-
-    private static VCExpr weakestPrecondition(Cmd cmd, VCExpr Q) {
-      VCExpressionGenerator gen = new VCExpressionGenerator;
+    
+    private static VCExpr weakestPrecondition(Cmd cmd, VCExpr Q, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
       if (cmd is AssertCmd) {
-        return gen.AndSimp()
+        // assert A -> A && Q
+        AssertCmd ac = (AssertCmd) cmd;
+        VCExpr A = translator.Translate(ac.Expr);
+
+        return gen.AndSimp(A, Q);
       } else if (cmd is AssumeCmd) {
-        return gen.ImpliesSimp()
+        // assume A -> A ==> Q
+        AssumeCmd ac = (AssumeCmd) cmd;
+        VCExpr A = translator.Translate(ac.Expr);
+
+        return gen.ImpliesSimp(A, Q);
+
       } else if (cmd is HavocCmd) {
+        // havoc x -> forall x :: Q
+        HavocCmd hc = (HavocCmd) cmd;
+        List<VCExprVar> vars = new List<VCExprVar>();
+        foreach (IdentifierExpr i in hc.Vars) {
+          vars.Add((VCExprVar) translator.Translate(i));
+        }
+
+        /*
+        // need to substitute all havoced vars for fresh vars to be bound???
+
+        VCExprSubstitution subst = new VCExprSubstitution( , new Dictionary<TypeVariable, Type>());
+        SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
+        VCExpr substQ = substituter.Mutate(Q, subst);
+        */
+
+        return gen.Forall(vars, new List<VCTrigger>(), Q);
 
       } else if (cmd is AssignCmd) {
+        // x := e -> Q[x\e]
+        AssignCmd ac = (AssignCmd) cmd;
+        ac = ac.AsSimpleAssignCmd;
 
+        Dictionary<VCExprVar, VCExpr> assignments = new Dictionary<VCExprVar, VCExpr>();
+        for (int i = 0; i < ac.Lhss.Count; ++i) {
+          IdentifierExpr lhs = ((SimpleAssignLhs) ac.Lhss[i]).AssignedVariable;
+          Expr rhs = ac.Rhss[i];
+          VCExprVar lhsPred = (VCExprVar) translator.Translate(lhs);
+          VCExpr rhsPred = translator.Translate(rhs);
+          assignments.Add(lhsPred, rhsPred);
+        }
+
+        VCExprSubstitution subst = new VCExprSubstitution(assignments , new Dictionary<TypeVariable, Type)());
+        SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
+        VCExpr substQ = substituter.Mutate(Q, subst);
+
+        return substQ; 
+      } else {
+        Debug.Print("error: unimplemented command for WP: " + cmd.ToString());
+      }
+      return null;
+    }
+
+    private static VCExpr strongestPostcondition(Cmd cmd, VCExpr P, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
+      if (cmd is AssertCmd) {
+        // assert A -> A && P
+        AssertCmd ac = (AssertCmd)cmd;
+        VCExpr A = translator.Translate(ac.Expr);
+
+        return gen.AndSimp(A, P);
+      } else if (cmd is AssumeCmd) {
+        // assume A -> P && A
+        AssumeCmd ac = (AssumeCmd)cmd;
+        VCExpr A = translator.Translate(ac.Expr);
+
+        return gen.AndSimp(P, A);
+
+      } else if (cmd is HavocCmd) {
+        // havoc x -> exists x' :: P[x\x']
+        HavocCmd hc = (HavocCmd)cmd;
+        List<VCExprVar> vars = new List<VCExprVar>();
+        foreach (IdentifierExpr i in hc.Vars) {
+          vars.Add((VCExprVar)translator.Translate(i));
+        }
+        Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
+
+        foreach (VCExprVar v in vars) {
+          VCExpr fresh = gen.Variable(v.Name + "'", v.Type);
+          toSubst.Add(v, fresh);
+        }
+
+        VCExprSubstitution subst = new VCExprSubstitution(toSubst, new Dictionary<TypeVariable, Type>());
+        SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
+        VCExpr substP = substituter.Mutate(P, subst);
+
+        return gen.Exists(vars, new List<VCTrigger>(), substP);
+
+      } else if (cmd is AssignCmd) {
+        // x := e -> exists x' :: P[x\x'] && e[x\x']
+        AssignCmd ac = (AssignCmd)cmd;
+        ac = ac.AsSimpleAssignCmd;
+
+        List<(VCExpr, VCExpr)> assignments = new List<(VCExpr, VCExpr)>();
+        Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
+        for (int i = 0; i < ac.Lhss.Count; ++i) {
+          IdentifierExpr lhs = ((SimpleAssignLhs)ac.Lhss[i]).AssignedVariable;
+          Expr rhs = ac.Rhss[i];
+          VCExprVar lhsPred = (VCExprVar)translator.Translate(lhs);
+          VCExpr rhsPred = translator.Translate(rhs);
+          assignments.Add((lhsPred, rhsPred));
+
+          VCExpr fresh = gen.Variable(lhsPred.Name + "'", lhsPred.Type);
+          toSubst.Add(lhsPred, fresh);
+        }
+
+        VCExprSubstitution subst = new VCExprSubstitution(toSubst, new Dictionary<TypeVariable, Type>());
+        SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
+        VCExpr sp = substituter.Mutate(P, subst);
+
+        foreach ((VCExpr, VCExpr) assign in assignments) {
+          VCExpr substRhs = substituter.Mutate(assign.Item2, subst);
+          sp = gen.AndSimp(sp, gen.Eq(assign.Item1, substRhs));
+        }
+
+        return sp;
       } else {
         Debug.Print("error: unimplemented command for WP: " + cmd.ToString());
       }
