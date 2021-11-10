@@ -11,6 +11,7 @@
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\AbsInt\AbsInt.csproj" />
     <ProjectReference Include="..\VCExpr\VCExpr.csproj" />
+    <ProjectReference Include="..\VCGeneration\VCGeneration.csproj" />
   </ItemGroup>
 
 </Project>
