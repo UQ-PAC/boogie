@@ -15,8 +15,8 @@ namespace Microsoft.Boogie.InvariantInference {
 
       ProverInterface prover = ProverInterface.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
         CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit);
-      VCExpressionGenerator gen = proverInterface.Context.ExprGen;
-      Boogie2VCExprTranslator translator = proverInterface.Context.BoogieExprTranslator;
+      VCExpressionGenerator gen = prover.Context.ExprGen;
+      Boogie2VCExprTranslator translator = prover.Context.BoogieExprTranslator;
 
       // analyze each procedure
       foreach (var proc in program.Procedures) {
