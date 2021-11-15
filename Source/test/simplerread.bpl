@@ -19,8 +19,8 @@ procedure read() returns ()
     call rely();
     assert Gamma_r1;
     while (r1 mod 2 != 0)
-        //invariant r1 <= z;
-        //invariant Gamma_r1;
+        invariant r1 <= z;
+        invariant Gamma_r1;
     {
         call rely();
         r1, Gamma_r1 := z, Gamma_z;

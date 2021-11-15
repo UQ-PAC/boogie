@@ -1013,10 +1013,10 @@ namespace Microsoft.Boogie
       var args = ps.args; // convenient synonym
       switch (name)
       {
-        case "inferfib":
+        case "inferinterpolant":
           if (ps.ConfirmArgumentCount(0)) {
             InferInvariantsInterpolant = true;
-            Debug.Print("inferring invariants");
+            Debug.Print("inferring invariant with craig interpolants");
           }
 
           return true;

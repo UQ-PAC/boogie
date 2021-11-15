@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
@@ -10,6 +10,7 @@
     <ProjectReference Include="..\CodeContractsExtender\CodeContractsExtender.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\AbsInt\AbsInt.csproj" />
+    <ProjectReference Include="..\Provers\SMTLib\SMTLib.csproj" />
     <ProjectReference Include="..\VCExpr\VCExpr.csproj" />
     <ProjectReference Include="..\VCGeneration\VCGeneration.csproj" />
   </ItemGroup>

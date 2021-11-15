@@ -521,6 +521,8 @@ namespace Microsoft.Boogie
     [NoDefaultContract]
     public abstract Outcome CheckOutcome(ErrorHandler handler, int taskID = -1);
 
+    public abstract Outcome CheckOutcomeBasic();
+
     public virtual string[] CalculatePath(int controlFlowConstant)
     {
       throw new System.NotImplementedException();
@@ -686,6 +688,11 @@ namespace Microsoft.Boogie
       /*Contract.Requires(descriptiveName != null);*/
       //Contract.Requires(vc != null);
       //Contract.Requires(handler != null);
+      throw new NotImplementedException();
+    }
+
+    public override Outcome CheckOutcomeBasic() {
+      Contract.EnsuresOnThrow<UnexpectedProverOutputException>(true);
       throw new NotImplementedException();
     }
 

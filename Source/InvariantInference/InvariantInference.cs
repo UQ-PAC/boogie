@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using Microsoft.Boogie.VCExprAST;
+using Microsoft.Boogie.SMTLib;
 
 namespace Microsoft.Boogie.InvariantInference {
   public class InvariantInference {
@@ -15,8 +16,11 @@ namespace Microsoft.Boogie.InvariantInference {
 
       ProverInterface prover = ProverInterface.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
         CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit);
-      VCExpressionGenerator gen = prover.Context.ExprGen;
-      Boogie2VCExprTranslator translator = prover.Context.BoogieExprTranslator;
+
+      MathSAT mathSAT = MathSAT.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
+        CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit);
+
+      // z3 apparently has a new interpolant algorithm - we should try it as well to compare
 
       // analyze each procedure
       foreach (var proc in program.Procedures) {
@@ -37,7 +41,7 @@ namespace Microsoft.Boogie.InvariantInference {
                   foreach (Block l in loopBody) {
                     Debug.Print(l.ToString());
                   }
-                  VCExpr invariant = InferLoopInvariant(program, procedureImplementations, impl, b, prover);
+                  VCExpr invariant = InferLoopInvariant(program, procedureImplementations, impl, b, prover, mathSAT);
                 }
               }
             }
@@ -47,7 +51,7 @@ namespace Microsoft.Boogie.InvariantInference {
     }
 
     private static VCExpr InferLoopInvariant(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
-      ProverInterface prover) {
+      ProverInterface prover, MathSAT mathSAT) {
       Boogie2VCExprTranslator translator = prover.Context.BoogieExprTranslator;
       VCExpressionGenerator gen = prover.Context.ExprGen;
 
@@ -62,25 +66,27 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpr loopP = getLoopPreCondition(requires, start, loopHead, gen, translator);
       VCExpr loopQ = getLoopPostCondition(ensures, end, loopHead, gen, translator);
 
-      List<List<Block>> loopPaths = getLoopPaths(loopHead);
+      List<List<Block>> loopPaths = new List<List<Block>>();
+      DoDFSVisitLoop(loopHead, loopHead, loopPaths);
+      List<List<Block>> loopPathsBack = new List<List<Block>>();
+      DoBackwardsDFSVisitLoop(loopHead, loopHead, loopPathsBack);
 
       // backward squeezing algorithm
       VCExpr K = getLoopGuard(loopPaths, gen, translator); // guard 
       List<VCExpr> A = new List<VCExpr> { loopP }; //A_0 = P
       List<VCExpr> B = new List<VCExpr> { gen.AndSimp(gen.NotSimp(K), gen.NotSimp(loopQ)) }; //B_0 = !K && !Q
-      List<VCExpr> I = new List<VCExpr>();
       int t = 0;
       int r = 0;
 
       while (true) {
         VCExpr ADisjunct = listDisjunction(A, gen);
         if (!satisfiable(gen.AndSimp(B[r], ADisjunct), prover)) {
-          I[r] = calculateInterpolant(B[r], ADisjunct);
-          VCExpr notI_r = gen.NotSimp(I[r]);
-          if (isInductive(notI_r, loopPaths, prover)) {
+          VCExpr I = calculateInterpolant(B[r], ADisjunct, mathSAT);
+          VCExpr notI_r = gen.NotSimp(I);
+          if (isInductive(notI_r, loopPathsBack, prover)) {
             return notI_r; // found invariant
           }
-          B[r + 1] = gen.OrSimp(I[r], pathWP(loopPaths, I[r], gen, translator)); // guard is implicitly included in WP via boogie's assumes
+          B[r + 1] = gen.OrSimp(I, pathWP(loopPathsBack, I, gen, translator)); // guard is implicitly included in WP via boogie's assumes
           r++;
           A[t + 1] = pathSP(loopPaths, A[t], gen, translator); // guard is implicitly included in SP via boogie's assumes
           t++; 
@@ -90,7 +96,7 @@ namespace Microsoft.Boogie.InvariantInference {
           } else {
             while (!isConcrete(B[r])) {
               r--;
-              B[r + 1] = gen.OrSimp(B[0], pathWP(loopPaths, B[r], gen, translator)); // guard is implicitly included in WP via boogie's assumes
+              B[r + 1] = gen.OrSimp(B[0], pathWP(loopPathsBack, B[r], gen, translator)); // guard is implicitly included in WP via boogie's assumes
               r++;
             }
           }
@@ -99,6 +105,7 @@ namespace Microsoft.Boogie.InvariantInference {
     }
     
     // very naive implementation, will surely need to make more sophisticated, just expects loop guard to be in assume statement at start of second block of any loop path
+    // works in basic cases at least
     private static VCExpr getLoopGuard(List<List<Block>> paths, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
       Block loopHead = paths[0][0];
       GotoCmd successors = (GotoCmd)loopHead.TransferCmd;
@@ -117,25 +124,32 @@ namespace Microsoft.Boogie.InvariantInference {
       return VCExpressionGenerator.True; // failure
     }
 
-    private static List<List<Block>> getLoopPaths(Block loopHead) {
-
-    }
-
     private static bool satisfiable(VCExpr predicate, ProverInterface prover) {
-      return true;
+      prover.BeginCheck("invariant inference check", predicate, null); // as far as I can tell, the ErrorHandler parameter here is not used at all and we don't want to use it anyway
+      ProverInterface.Outcome outcome = prover.CheckOutcomeBasic();
+      switch(outcome) {
+        case (ProverInterface.Outcome.Valid):
+          return true;
+        case (ProverInterface.Outcome.Invalid):
+          return false;
+        default:
+          Debug.Print("error: " + outcome);
+          break;
+      }
+      return false;
     }
 
     // calculates craig interpolant for A w.r.t. B
-    private static VCExpr calculateInterpolant(VCExpr A, VCExpr B) {
-
+    private static VCExpr calculateInterpolant(VCExpr A, VCExpr B, MathSAT mathSAT) {
+      return null;
     }
 
     private static bool isInductive(VCExpr invarCandidate, List<List<Block>> paths, ProverInterface prover) {
       Boogie2VCExprTranslator translator = prover.Context.BoogieExprTranslator;
       VCExpressionGenerator gen = prover.Context.ExprGen;
       VCExpr loopBodyWP = pathWP(paths, invarCandidate, gen, translator);
-      VCExpr vc = gen.NotSimp(gen.ImpliesSimp(invarCandidate, loopBodyWP)); // guard is implicitly included in WP via boogie's assumes
-      return !satisfiable(vc, prover);
+      VCExpr imp = gen.ImpliesSimp(invarCandidate, loopBodyWP); // guard is implicitly included in WP via boogie's assumes
+      return satisfiable(imp, prover);
     }
 
     private static bool isConcrete(VCExpr pred) {
@@ -187,12 +201,8 @@ namespace Microsoft.Boogie.InvariantInference {
       return end;
     }
     
+    // need to completely rework paths approach
     private static void DoDFSVisit(Block block, Block target, List<List<Block>> paths) {
-      // case 1. We visit the target => We are done
-      if (block == target) {
-        paths.Last().Remove(paths.Last().Last()); // don't want target in path
-        return;
-      }
 
       // case 2. We visit a node that ends with a return => path does not reach target
       if (block.TransferCmd is ReturnCmd) {
@@ -207,23 +217,88 @@ namespace Microsoft.Boogie.InvariantInference {
         bool firstSuccessor = false;
         List<Block> branchPoint = paths.Last().ToList();
         foreach (Block nextBlock in successors.labelTargets) {
-          if (!firstSuccessor) {
-            firstSuccessor = true;
-          } else {
-            // create new path for new branch
-            paths.Add(branchPoint.ToList());
+          if (nextBlock != target) {
+            if (!firstSuccessor) {
+              firstSuccessor = true;
+            } else {
+              // create new path for new branch
+              paths.Add(branchPoint.ToList());
+            }
+            paths.Last().Add(nextBlock);
+            DoDFSVisit(nextBlock, target, paths);
           }
-          paths.Last().Add(nextBlock);
-          DoDFSVisit(nextBlock, target, paths);
+        }
+      }
+    }
+
+    // need to fix case where loop is single block
+    private static void DoDFSVisitLoop(Block block, Block loopHead, List<List<Block>> paths) {
+
+      // case 1. We visit the loop head
+      if (block == loopHead && !paths.Any()) {
+        // initial case
+        paths.Add(new List<Block> { loopHead });
+      }
+
+      // case 2. We visit a node that ends with a return => path does not reach target
+      if (block.TransferCmd is ReturnCmd) {
+        paths.Remove(paths.Last());
+        return;
+      }
+
+      // case 3. We visit a node with successors => continue the exploration of its successors
+      GotoCmd successors = (GotoCmd)block.TransferCmd;
+
+      if (successors.labelTargets != null) { 
+        bool firstSuccessor = false;
+        List<Block> branchPoint = paths.Last().ToList();
+        foreach (Block nextBlock in successors.labelTargets) {
+          if (nextBlock != loopHead) {
+            if (!firstSuccessor) {
+              firstSuccessor = true;
+            } else {
+              // create new path for new branch
+              paths.Add(branchPoint.ToList());
+            }
+            paths.Last().Add(nextBlock); // don't want target in path
+            DoDFSVisitLoop(nextBlock, loopHead, paths);
+          }
         }
       }
     }
 
     private static void DoBackwardsDFSVisit(Block block, Block target, List<List<Block>> paths) {
-      // case 1. We visit the target => We are done
-      if (block == target) {
-        paths.Last().Remove(paths.Last().Last()); // don't want target in path
-        return; 
+
+      // case 2. We visit a node that has no predecessors => path does not reach loop
+      if (block.Predecessors.Count == 0) {
+        paths.Remove(paths.Last());
+        return;
+      }
+
+      // case 3. We visit a node with predecessors => continue the exploration of its predecessors
+      if (block.Predecessors != null) {
+        bool firstPredecessor = false;
+        List<Block> branchPoint = paths.Last().ToList();
+        foreach (Block nextBlock in block.Predecessors) {
+          if (nextBlock != target) {
+            if (!firstPredecessor) {
+              firstPredecessor = true;
+            } else {
+              // create new path for new branch
+              paths.Add(branchPoint.ToList());
+            }
+            paths.Last().Add(nextBlock);
+            DoBackwardsDFSVisit(nextBlock, target, paths);
+          }
+        }
+      }
+    }
+
+    private static void DoBackwardsDFSVisitLoop(Block block, Block loopHead, List<List<Block>> paths) {
+      // case 1. We visit the loop head
+      if (block == loopHead && !paths.Any()) {
+        // initial case
+        paths.Add(new List<Block> { loopHead });
       }
 
       // case 2. We visit a node that has no predecessors => path does not reach loop
@@ -237,24 +312,27 @@ namespace Microsoft.Boogie.InvariantInference {
         bool firstPredecessor = false;
         List<Block> branchPoint = paths.Last().ToList();
         foreach (Block nextBlock in block.Predecessors) {
-          if (!firstPredecessor) {
-            firstPredecessor = true;
-          } else {
-            // create new path for new branch
-            paths.Add(branchPoint.ToList());
+          if (nextBlock != loopHead) {
+            if (!firstPredecessor) {
+              firstPredecessor = true;
+            } else {
+              // create new path for new branch
+              paths.Add(branchPoint.ToList());
+            }
+            paths.Last().Add(nextBlock);
+            DoBackwardsDFSVisitLoop(nextBlock, loopHead, paths);
           }
-          paths.Last().Add(nextBlock);
-          DoDFSVisit(nextBlock, target, paths);
         }
       }
     }
 
-    private static VCExpr pathSP(List<List<Block>> paths, VCExpr P, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
+    private static VCExpr pathSP(List<List<Block>> paths, VCExpr P_In, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
       if (paths.Count == 0) {
         Debug.Print("error: no paths to calculate SP on");
       }
       VCExpr sp = VCExpressionGenerator.False; // default to be replaced in later or
       foreach (List<Block> path in paths) {
+        VCExpr P = P_In;
         foreach (Block block in path) {
           foreach(Cmd cmd in block.Cmds) {
             P = strongestPostcondition(cmd, P, gen, translator);
@@ -265,12 +343,13 @@ namespace Microsoft.Boogie.InvariantInference {
       return sp;
     }
 
-    private static VCExpr pathWP(List<List<Block>> paths, VCExpr Q, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
+    private static VCExpr pathWP(List<List<Block>> paths, VCExpr Q_In, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
       if (paths.Count == 0) {
         Debug.Print("error: no paths to calculate WP on");
       }
       VCExpr wp = VCExpressionGenerator.False; // default to be replaced in later or
       foreach (List<Block> path in paths) {
+        VCExpr Q = Q_In;
         foreach (Block block in path) {
           for (int i = block.Cmds.Count; --i >= 0;) {
             Q = weakestPrecondition(block.Cmds[i], Q, gen, translator);
@@ -376,17 +455,19 @@ namespace Microsoft.Boogie.InvariantInference {
           vars.Add((VCExprVar)translator.Translate(i));
         }
         Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
+        List<VCExprVar> freshVars = new List<VCExprVar>();
 
         foreach (VCExprVar v in vars) {
-          VCExpr fresh = gen.Variable(v.Name + "'", v.Type);
+          VCExprVar fresh = gen.Variable(v.Name + "'", v.Type); // need to make more sophisticated
           toSubst.Add(v, fresh);
+          freshVars.Add(fresh);
         }
 
         VCExprSubstitution subst = new VCExprSubstitution(toSubst, new Dictionary<TypeVariable, Type>());
         SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
         VCExpr substP = substituter.Mutate(P, subst);
 
-        return gen.Exists(vars, new List<VCTrigger>(), substP);
+        return gen.Exists(freshVars, new List<VCTrigger>(), substP);
 
       } else if (cmd is AssignCmd) {
         // x := e -> exists x' :: P[x\x'] && x == e[x\x']
@@ -395,6 +476,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
         List<(VCExpr, VCExpr)> assignments = new List<(VCExpr, VCExpr)>();
         Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
+        List<VCExprVar> freshVars = new List<VCExprVar>();
         for (int i = 0; i < ac.Lhss.Count; ++i) {
           IdentifierExpr lhs = ((SimpleAssignLhs)ac.Lhss[i]).AssignedVariable;
           Expr rhs = ac.Rhss[i];
@@ -402,22 +484,34 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr rhsPred = translator.Translate(rhs);
           assignments.Add((lhsPred, rhsPred));
 
-          VCExpr fresh = gen.Variable(lhsPred.Name + "'", lhsPred.Type);
+          VCExprVar fresh = gen.Variable(lhsPred.Name + "'", lhsPred.Type); // need to make more sophisticated
           toSubst.Add(lhsPred, fresh);
+          freshVars.Add(fresh);
         }
 
+        bool needExists = false; // need to optimise out case where x not in RHS or P but this doesn't really work at present, need to fix somehow
         VCExprSubstitution subst = new VCExprSubstitution(toSubst, new Dictionary<TypeVariable, Type>());
         SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
-        VCExpr sp = substituter.Mutate(P, subst);
+        VCExpr substP = substituter.Mutate(P, subst);
+        if (substP != P) {
+          needExists = true;
+        }
 
         foreach ((VCExpr, VCExpr) assign in assignments) {
           VCExpr substRhs = substituter.Mutate(assign.Item2, subst);
-          sp = gen.AndSimp(sp, gen.Eq(assign.Item1, substRhs));
+          if (substRhs != assign.Item2) {
+            needExists = true;
+          }
+          substP = gen.AndSimp(substP, gen.Eq(assign.Item1, substRhs));
+        }
+        VCExpr sp = substP;
+        if (needExists) {
+          sp = gen.Exists(freshVars, new List<VCTrigger>(), substP);
         }
 
         return sp;
       } else {
-        Debug.Print("error: unimplemented command for WP: " + cmd.ToString());
+        Debug.Print("error: unimplemented command for SP: " + cmd.ToString());
       }
       return null;
     }

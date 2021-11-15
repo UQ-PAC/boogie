@@ -775,6 +775,30 @@ namespace Microsoft.Boogie.SMTLib
 
       ReportProverError(errors);
     }
+    
+    public override Outcome CheckOutcomeBasic() {
+      var result = Outcome.Undetermined;
+
+      if (Process == null || proverErrors.Count > 0) {
+        SendThisVC("(pop 1)");
+        FlushLogFile();
+        return result;
+      }
+
+      result = GetResponse();
+
+      FlushLogFile();
+
+      if (libOptions.RestartProverPerVC && Process != null) {
+        Process.NeedsRestart = true;
+      }
+
+      SendThisVC("(pop 1)");
+      FlushLogFile();
+
+      return result;
+    }
+    
 
     [NoDefaultContract]
     public override Outcome CheckOutcome(ErrorHandler handler, int errorLimit)
@@ -1632,7 +1656,9 @@ namespace Microsoft.Boogie.SMTLib
                 (resp.Arguments[0].Name.Contains("max. resource limit exceeded")
                  || resp.Arguments[0].Name.Contains("resource limits reached")))
             {
-              currentErrorHandler.OnResourceExceeded("max resource limit");
+              if (currentErrorHandler != null) {
+                currentErrorHandler.OnResourceExceeded("max resource limit");
+              }
               result = Outcome.OutOfResource;
             }
             else
