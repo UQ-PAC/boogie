@@ -153,6 +153,7 @@ namespace Microsoft.Boogie.SMTLib
           break;
         case SolverKind.MATHSAT:
           SolverArguments.Add("-input=smt2"); // idk what else we need 
+          SolverArguments.Add("-interpolation=TRUE");
           SolverBinaryName = "mathsat";
           break;
         default:

@@ -30,6 +30,7 @@ namespace Microsoft.Boogie.SMTLib {
 
       // we want to override the options intended for the main prover with prover options specific to MathSAT, do so here?
 
+
       VCExpressionGenerator gen = new VCExpressionGenerator();
 
       List<string> proverCommands = new List<string>();
@@ -73,7 +74,31 @@ namespace Microsoft.Boogie.SMTLib {
       return new MathSAT(libOptions, options, ctx.ExprGen, ctx);
     }
 
-    public 
+    public VCExpr computeInterpolant(VCExpr A, VCExpr B) {
+
+      // push?
+      SendThisVC("(push 1)");
+
+      // need to add axioms??
+
+      // declare A & B as functions
+      SendThisVC("(define-fun A () Bool (" + VCExpr2String(A, 1) + ")"); // need to check what VCExpr2String polarity actually does
+      SendThisVC("(define-fun B () Bool (" + VCExpr2String(B, 1) + ")");
+
+      // define interpolation groups?
+      SendThisVC("(assert (! A :interpolation-group g1))");
+      SendThisVC("(assert (! A :interpolation-group g2))");
+
+      // request interpolant
+      SendCheckSat();
+      SendThisVC("(get-interpolant (g1)");
+
+      // get response & parse (just smt-lib expression)
+
+      // pop?
+      SendThisVC("(push 1)");
+
+    }
 
   }
 }

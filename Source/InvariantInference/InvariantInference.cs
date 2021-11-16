@@ -141,7 +141,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
     // calculates craig interpolant for A w.r.t. B
     private static VCExpr calculateInterpolant(VCExpr A, VCExpr B, MathSAT mathSAT) {
-      return null;
+      return VCExpressionGenerator.True;
     }
 
     private static bool isInductive(VCExpr invarCandidate, List<List<Block>> paths, ProverInterface prover) {
