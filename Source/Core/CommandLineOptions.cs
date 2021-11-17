@@ -562,6 +562,9 @@ namespace Microsoft.Boogie
     public string ProverLogFilePath = null;
     public bool ProverLogFileAppend = false;
 
+    public string MathSATLogFilePath = null;
+    public bool MathSATLogFileAppend = false;
+
     public bool PrintInstrumented {
       get => printInstrumented;
       set => printInstrumented = value;
@@ -1154,6 +1157,13 @@ namespace Microsoft.Boogie
 
           return true;
 
+        case "mathSATLog":
+          if (ps.ConfirmArgumentCount(1)) {
+            MathSATLogFilePath = args[ps.i];
+          }
+
+          return true;
+
         case "proverPreamble":
           if (ps.ConfirmArgumentCount(1))
           {
@@ -1691,6 +1701,7 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("alwaysAssumeFreeLoopInvariants", ref AlwaysAssumeFreeLoopInvariants, true) ||
               ps.CheckBooleanFlag("proverHelp", ref proverHelpRequested) ||
               ps.CheckBooleanFlag("proverLogAppend", ref ProverLogFileAppend) ||
+              ps.CheckBooleanFlag("mathSATLogAppend", ref MathSATLogFileAppend) ||
               ps.CheckBooleanFlag("soundLoopUnrolling", ref SoundLoopUnrolling) ||
               ps.CheckBooleanFlag("checkInfer", ref InstrumentWithAsserts) ||
               ps.CheckBooleanFlag("restartProver", ref restartProverPerVc) ||

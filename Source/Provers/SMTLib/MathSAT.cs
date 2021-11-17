@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
 using Microsoft.Boogie.VCExprAST;
 
 namespace Microsoft.Boogie.SMTLib {
@@ -12,7 +13,7 @@ namespace Microsoft.Boogie.SMTLib {
     }
 
     public static MathSAT CreateProver(Program prog, string /*?*/ logFilePath, bool appendLogFile, uint timeout) {
-      ProverOptions options = cce.NonNull(CommandLineOptions.Clo.TheProverFactory).BlankProverOptions();
+      ProverOptions options = new MathSATOptions();
 
       if (logFilePath != null) {
         options.LogFilename = logFilePath;
@@ -24,12 +25,8 @@ namespace Microsoft.Boogie.SMTLib {
       if (timeout > 0) {
         options.TimeLimit = Util.BoundedMultiply(timeout, 1000);
       }
-      options.Parse(CommandLineOptions.Clo.ProverOptions);
 
-      SMTLibOptions libOptions = CommandLineOptions.Clo;
-
-      // we want to override the options intended for the main prover with prover options specific to MathSAT, do so here?
-
+      SMTLibOptions libOptions = CommandLineOptions.Clo; // not sure if need to override anything here specifically for MathSAT?
 
       VCExpressionGenerator gen = new VCExpressionGenerator();
 
@@ -74,30 +71,49 @@ namespace Microsoft.Boogie.SMTLib {
       return new MathSAT(libOptions, options, ctx.ExprGen, ctx);
     }
 
-    public VCExpr computeInterpolant(VCExpr A, VCExpr B) {
+    public VCExpr calculateInterpolant(VCExpr A, VCExpr B, string AStr, string BStr) {
+      // need to do all sorts of setup from beginCheck?
+      InterpolationSetup("interpolant", A, B);
 
-      // push?
       SendThisVC("(push 1)");
 
-      // need to add axioms??
-
       // declare A & B as functions
-      SendThisVC("(define-fun A () Bool (" + VCExpr2String(A, 1) + ")"); // need to check what VCExpr2String polarity actually does
-      SendThisVC("(define-fun B () Bool (" + VCExpr2String(B, 1) + ")");
+      SendThisVC("(define-fun A () Bool " + AStr + ")");
+      SendThisVC("(define-fun B () Bool " + BStr + ")");
 
-      // define interpolation groups?
+      // define interpolation groups
       SendThisVC("(assert (! A :interpolation-group g1))");
-      SendThisVC("(assert (! A :interpolation-group g2))");
+      SendThisVC("(assert (! B :interpolation-group g2))");
 
       // request interpolant
       SendCheckSat();
       SendThisVC("(get-interpolant (g1)");
 
-      // get response & parse (just smt-lib expression)
+      FlushLogFile();
 
-      // pop?
-      SendThisVC("(push 1)");
+      // get response
+      var resp = Process.GetProverResponse();
+      Debug.Print(resp.ToString());
+      resp = Process.GetProverResponse();
+      Debug.Print(resp.ToString());
 
+      // need to parse response as VCExpr - how to map variables back to source?
+
+      SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
+      FlushLogFile();
+
+      return VCExpressionGenerator.True;
+    }
+
+  }
+
+  public class MathSATOptions : SMTLibProverOptions {
+
+    public MathSATOptions() {
+      this.Solver = SolverKind.MATHSAT;
+      SolverArguments.Add("-input=smt2"); // idk what else we need 
+      SolverArguments.Add("-interpolation=TRUE");
+      ProverName = "mathsat";
     }
 
   }

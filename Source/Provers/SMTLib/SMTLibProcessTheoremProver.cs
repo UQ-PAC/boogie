@@ -517,7 +517,7 @@ namespace Microsoft.Boogie.SMTLib
       }
     }
 
-    private void FlushLogFile()
+    protected void FlushLogFile()
     {
       if (currentLogFile != null)
       {
@@ -533,6 +533,70 @@ namespace Microsoft.Boogie.SMTLib
       {
         Process.Close();
       }
+    }
+
+    public void InterpolationSetup(string descriptiveName, VCExpr A, VCExpr B) {
+      if (options.SeparateLogFiles) {
+        CloseLogFile(); // shouldn't really happen
+      }
+
+      if (options.LogFilename != null && currentLogFile == null) {
+        currentLogFile = OpenOutputFile(descriptiveName);
+        currentLogFile.Write(common.ToString());
+      }
+
+      PrepareCommon();
+      FlushAndCacheCommons();
+      VCExpr2String(A, 1);
+      VCExpr2String(B, 1);
+      FlushAxioms();
+    }
+
+    public override string EliminateQuantifiers(VCExpr predicate) {
+      if (options.Solver == SolverKind.Z3) {
+        if (options.SeparateLogFiles) {
+          CloseLogFile(); // shouldn't really happen
+        }
+
+        if (options.LogFilename != null && currentLogFile == null) {
+          currentLogFile = OpenOutputFile("eliminate quantifiers");
+          currentLogFile.Write(common.ToString());
+        }
+
+        PrepareCommon();
+        FlushAndCacheCommons();
+        string SMTPred = VCExpr2String(predicate, 1);
+        FlushAxioms();
+        SendThisVC("(push 1)");
+        SendThisVC("(assert " + SMTPred + ")");
+        FlushLogFile();
+        SendThisVC("(apply qe)");
+        // naive pruning of output to get the simplified predicate
+        var resp = Process.GetProverResponse();
+        FlushLogFile();
+        SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
+        List<SExpr> goodOut = new List<SExpr>();
+
+        if (resp.Name == "goals") {
+          // assume only single goal for now
+          if (resp.ArgCount != 1) {
+            Debug.Print("quantifier elimination goals != 1");
+          }
+          var goal = resp.Arguments[0];
+          if (goal.Name == "goal") {
+            foreach (SExpr arg in goal.Arguments) {
+              // remove extraneous output such as ticklebool & precision info
+              if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
+                goodOut.Add(arg);
+              }
+            }
+          }
+        }
+        
+        SExpr elim = new SExpr("and", goodOut);
+        return elim.ToString();
+      }
+      return null;
     }
 
     public override void BeginCheck(string descriptiveName, VCExpr vc, ErrorHandler handler)

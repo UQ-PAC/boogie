@@ -102,11 +102,8 @@ namespace Microsoft.Boogie.SMTLib
           case "yices2":
             Solver = SolverKind.YICES2;
             break;
-          case "mathsat":
-            Solver = SolverKind.MATHSAT;
-            break;
           default:
-            ReportError("Invalid SOLVER value; must be 'Z3' or 'CVC5' or 'Yices2' or 'MathSAT'");
+            ReportError("Invalid SOLVER value; must be 'Z3' or 'CVC5' or 'Yices2'");
             return false;
         }
 
@@ -150,11 +147,6 @@ namespace Microsoft.Boogie.SMTLib
           }
 
           SolverBinaryName = "yices-smt2";
-          break;
-        case SolverKind.MATHSAT:
-          SolverArguments.Add("-input=smt2"); // idk what else we need 
-          SolverArguments.Add("-interpolation=TRUE");
-          SolverBinaryName = "mathsat";
           break;
         default:
           Contract.Assert(false);

@@ -17,8 +17,8 @@ namespace Microsoft.Boogie.InvariantInference {
       ProverInterface prover = ProverInterface.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
         CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit);
 
-      MathSAT mathSAT = MathSAT.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
-        CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit);
+      MathSAT mathSAT = MathSAT.CreateProver(program, CommandLineOptions.Clo.MathSATLogFilePath,
+        CommandLineOptions.Clo.MathSATLogFileAppend, CommandLineOptions.Clo.TimeLimit);
 
       // z3 apparently has a new interpolant algorithm - we should try it as well to compare
 
@@ -80,15 +80,15 @@ namespace Microsoft.Boogie.InvariantInference {
 
       while (true) {
         VCExpr ADisjunct = listDisjunction(A, gen);
-        if (!satisfiable(gen.AndSimp(B[r], ADisjunct), prover)) {
-          VCExpr I = calculateInterpolant(B[r], ADisjunct, mathSAT);
+        if (!satisfiable(gen.AndSimp(B[r], ADisjunct), prover)) { // just for testing
+          VCExpr I = CalculateInterpolant(B[r], ADisjunct, prover, mathSAT);
           VCExpr notI_r = gen.NotSimp(I);
           if (isInductive(notI_r, loopPathsBack, prover)) {
             return notI_r; // found invariant
           }
-          B[r + 1] = gen.OrSimp(I, pathWP(loopPathsBack, I, gen, translator)); // guard is implicitly included in WP via boogie's assumes
+          B.Insert(r + 1, gen.OrSimp(I, pathWP(loopPathsBack, I, gen, translator))); // guard is implicitly included in WP via boogie's assumes
           r++;
-          A[t + 1] = pathSP(loopPaths, A[t], gen, translator); // guard is implicitly included in SP via boogie's assumes
+          A.Insert(t + 1, pathSP(loopPaths, A[t], gen, translator)); // guard is implicitly included in SP via boogie's assumes
           t++; 
         } else {
           if (isConcrete(B[r])) {
@@ -96,12 +96,19 @@ namespace Microsoft.Boogie.InvariantInference {
           } else {
             while (!isConcrete(B[r])) {
               r--;
-              B[r + 1] = gen.OrSimp(B[0], pathWP(loopPathsBack, B[r], gen, translator)); // guard is implicitly included in WP via boogie's assumes
-              r++;
             }
+            B.Insert(r + 1, gen.OrSimp(B[0], pathWP(loopPathsBack, B[r], gen, translator))); // guard is implicitly included in WP via boogie's assumes
+            r++;
           }
         }
       }
+    }
+
+    private static VCExpr CalculateInterpolant(VCExpr A, VCExpr B, ProverInterface prover, MathSAT mathSAT) {
+      string AElim = prover.EliminateQuantifiers(A);
+      string BElim = prover.EliminateQuantifiers(B);
+
+      return mathSAT.calculateInterpolant(A, B, AElim, BElim);
     }
     
     // very naive implementation, will surely need to make more sophisticated, just expects loop guard to be in assume statement at start of second block of any loop path
