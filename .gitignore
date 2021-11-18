@@ -40,3 +40,4 @@ Source/*.userprefs
 .idea/
 
 Source/BoogieDriver/Properties/launchSettings.json
+/Source/*.txt

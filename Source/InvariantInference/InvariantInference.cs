@@ -134,7 +134,7 @@ namespace Microsoft.Boogie.InvariantInference {
     private static bool satisfiable(VCExpr predicate, ProverInterface prover) {
       prover.BeginCheck("invariant inference check", predicate, null); // as far as I can tell, the ErrorHandler parameter here is not used at all and we don't want to use it anyway
       ProverInterface.Outcome outcome = prover.CheckOutcomeBasic();
-      switch(outcome) {
+      switch (outcome) {
         case (ProverInterface.Outcome.Valid):
           return true;
         case (ProverInterface.Outcome.Invalid):

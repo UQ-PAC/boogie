@@ -571,7 +571,7 @@ namespace Microsoft.Boogie.SMTLib
         SendThisVC("(assert " + SMTPred + ")");
         FlushLogFile();
         SendThisVC("(apply qe)");
-        // naive pruning of output to get the simplified predicate
+
         var resp = Process.GetProverResponse();
         FlushLogFile();
         SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
@@ -592,9 +592,11 @@ namespace Microsoft.Boogie.SMTLib
             }
           }
         }
-        
-        SExpr elim = new SExpr("and", goodOut);
-        return elim.ToString();
+        if (goodOut.Count() > 1) {
+          return new SExpr("and", goodOut).ToString();
+        } else if (goodOut.Count() == 1) {
+          return goodOut[0].ToString();
+        }
       }
       return null;
     }

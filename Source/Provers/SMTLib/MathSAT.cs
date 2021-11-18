@@ -85,22 +85,31 @@ namespace Microsoft.Boogie.SMTLib {
       SendThisVC("(assert (! A :interpolation-group g1))");
       SendThisVC("(assert (! B :interpolation-group g2))");
 
-      // request interpolant
+      // need to check sat before requesting interpolant
       SendCheckSat();
-      SendThisVC("(get-interpolant (g1)");
-
-      FlushLogFile();
-
-      // get response
-      var resp = Process.GetProverResponse();
+      SExpr resp = Process.GetProverResponse();
       Debug.Print(resp.ToString());
+
+      // if sat then throw exception
+      if (resp.Name == "sat") {
+        Debug.Print("error: trying to find interpolant of satisfiable pair of assertions");
+      } else if (resp.Name != "unsat") {
+        Debug.Print("unexpected prover response");
+      }
+
+      SendThisVC("(get-interpolant (g1))");
       resp = Process.GetProverResponse();
       Debug.Print(resp.ToString());
-
-      // need to parse response as VCExpr - how to map variables back to source?
-
+      FlushLogFile();
       SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
       FlushLogFile();
+
+      //need to parse SExpr into VCExpr and resolve identifiers back to boogie's
+
+      // and -> gen.AndSimp
+      // or -> gen.OrSimp
+      // not -> gen.NotSimp
+      // => -> gen.ImpliesSimp
 
       return VCExpressionGenerator.True;
     }

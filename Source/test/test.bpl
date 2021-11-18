@@ -1,6 +1,6 @@
 procedure test() {
   var x: int, n: int;
-  assume (n >= 0);
+  assume (x < n);
   while (x < n) {
       x := x + 1;
   }
