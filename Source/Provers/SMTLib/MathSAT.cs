@@ -71,7 +71,7 @@ namespace Microsoft.Boogie.SMTLib {
       return new MathSAT(libOptions, options, ctx.ExprGen, ctx);
     }
 
-    public VCExpr calculateInterpolant(VCExpr A, VCExpr B, string AStr, string BStr) {
+    public SExpr calculateInterpolant(VCExpr A, VCExpr B, string AStr, string BStr) {
       // need to do all sorts of setup from beginCheck?
       InterpolationSetup("interpolant", A, B);
 
@@ -104,14 +104,7 @@ namespace Microsoft.Boogie.SMTLib {
       SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
       FlushLogFile();
 
-      //need to parse SExpr into VCExpr and resolve identifiers back to boogie's
-
-      // and -> gen.AndSimp
-      // or -> gen.OrSimp
-      // not -> gen.NotSimp
-      // => -> gen.ImpliesSimp
-
-      return VCExpressionGenerator.True;
+      return resp;
     }
 
   }
