@@ -567,6 +567,9 @@ namespace Microsoft.Boogie.SMTLib
         PrepareCommon();
         FlushAndCacheCommons();
         string SMTPred = VCExpr2String(predicate, 1);
+        if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
+          return SMTPred;
+        }
         FlushAxioms();
         SendThisVC("(push 1)");
         SendThisVC("(assert " + SMTPred + ")");
@@ -586,14 +589,15 @@ namespace Microsoft.Boogie.SMTLib
           var goal = resp.Arguments[0];
           if (goal.Name == "goal") {
             foreach (SExpr arg in goal.Arguments) {
-              // remove extraneous output such as ticklebool & precision info
-              if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
-                goodOut.Add(arg);
-              }
               if (arg.Name == "let") {
                 // need to figure out how to resolve lets? or option to make Z3 not output them
-                //goodOut.Add(ResolveLet(arg));
+                Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
+                goodOut.Add(SExpr.ResolveLet(arg, letDefs));
+              } else if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
+                // remove extraneous output such as ticklebool & precision info
+                goodOut.Add(arg);
               }
+
             }
           }
         }
@@ -605,36 +609,6 @@ namespace Microsoft.Boogie.SMTLib
       }
       return null;
     }
-    /*
-    // really need to put this somewhere else 
-    private SExpr ResolveLet(SExpr sexpr) {
-      if (sexpr.Name == "let") {
-        Dictionary<String, SExpr> let = new Dictionary<String, SExpr>();
-        foreach (SExpr letDef in sexpr[0].Arguments) {
-          let.Add(letDef[0].Name, ResolveLet(letDef[0][0]));
-        }
-        SExpr resolved = ResolveLet(sexpr[1]);
-      } else {
-        return sexpr;
-      }
-    }
-
-    private SExpr ResolveLet(SExpr sexpr, Dictionary<String, SExpr> letDef) {
-      for (int i = 0; i < sexpr.ArgCount; i++) {
-        SExpr s = sexpr.Arguments[i];
-        SExpr toReplace;
-        if (letDef.TryGetValue(s.Name, out toReplace)) {
-
-        }
-      }
-      
-      if (letDef.TryGetValue(sexpr.Name, out toReplace)) {
-        return toReplace;
-      } else {
-        return  
-      }
-    }
-    */
 
     public override void BeginCheck(string descriptiveName, VCExpr vc, ErrorHandler handler)
     {

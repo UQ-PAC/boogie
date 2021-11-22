@@ -71,8 +71,7 @@ namespace Microsoft.Boogie.SMTLib {
       return new MathSAT(libOptions, options, ctx.ExprGen, ctx);
     }
 
-    public SExpr calculateInterpolant(VCExpr A, VCExpr B, string AStr, string BStr) {
-      // need to do all sorts of setup from beginCheck?
+    public bool Satisfiable(VCExpr A, VCExpr B, string AStr, string BStr) {
       InterpolationSetup("interpolant", A, B);
 
       SendThisVC("(push 1)");
@@ -84,27 +83,34 @@ namespace Microsoft.Boogie.SMTLib {
       // define interpolation groups
       SendThisVC("(assert (! A :interpolation-group g1))");
       SendThisVC("(assert (! B :interpolation-group g2))");
-
       // need to check sat before requesting interpolant
       SendCheckSat();
       SExpr resp = Process.GetProverResponse();
       Debug.Print(resp.ToString());
 
-      // if sat then throw exception
       if (resp.Name == "sat") {
-        Debug.Print("error: trying to find interpolant of satisfiable pair of assertions");
+        SendThisVC("(pop 1)");
+        FlushLogFile();
+        return true;
       } else if (resp.Name != "unsat") {
-        Debug.Print("unexpected prover response");
+        SendThisVC("(pop 1)");
+        FlushLogFile();
+        Debug.Print("unexpected prover response " + resp);
+        return true;
       }
+      return false;
+    }
 
+    // must have called Satisfiable first
+    public SExpr CalculateInterpolant() {
       SendThisVC("(get-interpolant (g1))");
-      resp = Process.GetProverResponse();
+      SExpr resp = Process.GetProverResponse();
       Debug.Print(resp.ToString());
-      FlushLogFile();
-      SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
+      SendThisVC("(pop 1)"); 
       FlushLogFile();
 
-      return resp;
+      Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
+      return SExpr.ResolveLet(resp, letDefs);
     }
 
   }
@@ -113,7 +119,7 @@ namespace Microsoft.Boogie.SMTLib {
 
     public MathSATOptions() {
       this.Solver = SolverKind.MATHSAT;
-      SolverArguments.Add("-input=smt2"); // idk what else we need 
+      SolverArguments.Add("-input=smt2");
       SolverArguments.Add("-interpolation=TRUE");
       ProverName = "mathsat";
     }

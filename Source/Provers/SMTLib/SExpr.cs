@@ -297,5 +297,28 @@ namespace Microsoft.Boogie
     }
 
     #endregion
+
+    // really need to put this somewhere else 
+    public static SExpr ResolveLet(SExpr sexpr, Dictionary<String, SExpr> letDefs) {
+      SExpr toReplace;
+      if (letDefs.TryGetValue(sexpr.Name, out toReplace)) {
+        // find symbol to replace
+        return toReplace;
+      } else if (sexpr.Name == "let") {
+        // find new let expression
+        foreach (SExpr def in sexpr[0].Arguments) {
+          letDefs.Add(def.Name, ResolveLet(def[0], letDefs));
+        }
+        SExpr resolved = ResolveLet(sexpr[1], letDefs);
+        return resolved;
+      }
+      // resolve all arguments
+      List<SExpr> newArgs = new List<SExpr>();
+      for (int i = 0; i < sexpr.ArgCount; i++) {
+        SExpr s = sexpr.Arguments[i];
+        newArgs.Add(ResolveLet(s, letDefs));
+      }
+      return new SExpr(sexpr.Name, newArgs);
+    }
   }
 }

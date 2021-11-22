@@ -159,28 +159,38 @@ namespace Microsoft.Boogie.InvariantInference {
 
       while (true) {
         VCExpr ADisjunct = listDisjunction(A, gen);
-        if (!satisfiable(gen.AndSimp(B[r], ADisjunct), prover)) { // just for testing
-          VCExpr I = CalculateInterpolant(B[r], ADisjunct, prover, mathSAT, scopeVars);
-          VCExpr notI_r = gen.NotSimp(I);
-          if (isInductive(notI_r, loopPathsBack, prover)) {
-            return notI_r; // found invariant
+        String B_rElim = prover.EliminateQuantifiers(B[r]);
+        String ADisjunctElim = prover.EliminateQuantifiers(ADisjunct);
+        if (!mathSAT.Satisfiable(B[r], ADisjunct, B_rElim, ADisjunctElim)) {
+          VCExpr I = StoVC(mathSAT.CalculateInterpolant(), gen, translator, scopeVars);
+          VCExpr notI = gen.NotSimp(I);
+          if (isInductive(notI, loopPathsBack, K, prover)) {
+            if (satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
+              if (satisfiable(gen.ImpliesSimp(gen.AndSimp(I, gen.NotSimp(K)), loopQ), prover)) {
+                return notI; // found invariant
+              }
+              Debug.Print("this shouldn't happen?");
+            }
+            Debug.Print("this shouldn't happen?");
           }
-          B.Insert(r + 1, gen.OrSimp(I, pathWP(loopPathsBack, I, gen, translator))); // guard is implicitly included in WP via boogie's assumes
+          B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, pathWP(loopPathsBack, I, gen, translator)))); // guard is implicitly included in WP via boogie's assumes
           r++;
-          A.Insert(t + 1, pathSP(loopPaths, A[t], gen, translator)); // guard is implicitly included in SP via boogie's assumes
+          A.Insert(t + 1, pathSP(loopPaths, gen.AndSimp(A[t], K), gen, translator)); // guard is implicitly included in SP via boogie's assumes
           t++; 
         } else {
           if (r <= concrete) {
             return VCExpressionGenerator.True; // fail to find invariant
           } else {
             r = concrete;
-            B.Insert(r + 1, gen.OrSimp(B[0], pathWP(loopPathsBack, B[r], gen, translator))); // guard is implicitly included in WP via boogie's assumes
+            B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, pathWP(loopPathsBack, B[r], gen, translator)))); // guard is implicitly included in WP via boogie's assumes
             r++;
+            concrete++;
           }
         }
       }
     }
 
+    /*
     private static VCExpr CalculateInterpolant(VCExpr A, VCExpr B, ProverInterface prover, MathSAT mathSAT, IEnumerable<Variable> scopeVars) {
       // need to only apply quantifier elimination if vcexpr contains quantifiers
       // also need to remove ticklebool if possible - means qe result is unnecessarily complex
@@ -188,8 +198,9 @@ namespace Microsoft.Boogie.InvariantInference {
       string BElim = prover.EliminateQuantifiers(B);
 
       SExpr output = mathSAT.calculateInterpolant(A, B, AElim, BElim);
-      return StoVC(output, prover.Context.ExprGen, prover.Context.BoogieExprTranslator, scopeVars);
+      return ;
     }
+    */
 
     private static VCExpr StoVC(SExpr sexpr, VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars) {
       // assuming everything is ints for now, figure out rest later
@@ -299,13 +310,14 @@ namespace Microsoft.Boogie.InvariantInference {
       return VCExpressionGenerator.True; // failure
     }
 
+    // shoul djust do this in mahsat eventually
     private static bool satisfiable(VCExpr predicate, ProverInterface prover) {
-      prover.BeginCheck("invariant inference check", predicate, null); // as far as I can tell, the ErrorHandler parameter here is not used at all and we don't want to use it anyway
+      prover.BeginCheck("invariant inference check", prover.Context.ExprGen.NotSimp(predicate), null); // as far as I can tell, the ErrorHandler parameter here is not used at all and we don't want to use it anyway
       ProverInterface.Outcome outcome = prover.CheckOutcomeBasic();
       switch (outcome) {
-        case (ProverInterface.Outcome.Valid):
-          return true;
         case (ProverInterface.Outcome.Invalid):
+          return true;
+        case (ProverInterface.Outcome.Valid):
           return false;
         default:
           Debug.Print("error: " + outcome);
@@ -314,22 +326,18 @@ namespace Microsoft.Boogie.InvariantInference {
       return false;
     }
 
-    private static bool isInductive(VCExpr invarCandidate, List<List<Block>> paths, ProverInterface prover) {
+    private static bool isInductive(VCExpr invarCandidate, List<List<Block>> paths, VCExpr guard, ProverInterface prover) {
       Boogie2VCExprTranslator translator = prover.Context.BoogieExprTranslator;
       VCExpressionGenerator gen = prover.Context.ExprGen;
       VCExpr loopBodyWP = pathWP(paths, invarCandidate, gen, translator);
-      VCExpr imp = gen.ImpliesSimp(invarCandidate, loopBodyWP); // guard is implicitly included in WP via boogie's assumes
+      VCExpr imp = gen.ImpliesSimp(gen.And(invarCandidate, guard), loopBodyWP);
       return satisfiable(imp, prover);
-    }
-
-    private static bool isConcrete(VCExpr pred) {
-      return true;
     }
 
     private static VCExpr listDisjunction(List<VCExpr> list, VCExpressionGenerator gen) {
       VCExpr disjunction = list[0];
       for (int i = 1; i < list.Count; i++) {
-        gen.OrSimp(disjunction, list[i]);
+        disjunction = gen.OrSimp(disjunction, list[i]);
       }
       return disjunction;
     }
@@ -592,11 +600,20 @@ namespace Microsoft.Boogie.InvariantInference {
           assignments.Add(lhsPred, rhsPred);
         }
 
-        VCExprSubstitution subst = new VCExprSubstitution(assignments , new Dictionary<TypeVariable, Type>());
+        VCExprSubstitution subst = new VCExprSubstitution(assignments, new Dictionary<TypeVariable, Type>());
         SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
         VCExpr substQ = substituter.Mutate(Q, subst);
 
         return substQ; 
+      } else if (cmd is CallCmd) {
+        CallCmd callCmd = (CallCmd)cmd;
+        StateCmd desugar = callCmd.Desugaring as StateCmd;
+        VCExpr QCall = Q;
+        for (int i = desugar.Cmds.Count - 1; i < 0; i--) {
+          Cmd c = desugar.Cmds[i];
+          QCall = weakestPrecondition(c, QCall, gen, translator);
+        }
+        return QCall;
       } else {
         Debug.Print("error: unimplemented command for WP: " + cmd.ToString());
       }
@@ -680,6 +697,14 @@ namespace Microsoft.Boogie.InvariantInference {
         }
 
         return sp;
+      } else if (cmd is CallCmd) {
+        CallCmd callCmd = (CallCmd)cmd;
+        StateCmd desugar = callCmd.Desugaring as StateCmd;
+        VCExpr PCall = P;
+        foreach (Cmd c in desugar.Cmds) {
+          PCall = strongestPostcondition(c, PCall, gen, translator);
+        }
+        return PCall;
       } else {
         Debug.Print("error: unimplemented command for SP: " + cmd.ToString());
       }
