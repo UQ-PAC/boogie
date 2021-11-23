@@ -29,26 +29,26 @@ procedure read() returns (y: int, Gamma_y: bool)
     {
         if (block2 == 0) {
             if ((r1 mod 2) != 0) {
-                call rely();
-		        r1, Gamma_r1 := z, Gamma_z;
-		        call rely();
+              call rely();
+		          r1, Gamma_r1 := z, Gamma_z;
+		          call rely();
             } else {
             	call rely();
-		        r2, Gamma_r2 := x, Gamma_x;
-                old_z := z;
-		        call rely();
+		          r2, Gamma_r2 := x, Gamma_x;
+              old_z := z;
+		          call rely();
     	        assert Gamma_z && Gamma_r1;
-    		    block := 0;
-    		    block2 := 1;
+    		      block := 0;
+    		      block2 := 1;
             }
         } else if (block2 == 1) {
             if (block != -1) {
                 if (block == 0) {
                     if (z != r1) {
                         call rely();
-			            r1, Gamma_r1 := z, Gamma_z;
-        		        call rely();
-        		        assert Gamma_r1;
+			                  r1, Gamma_r1 := z, Gamma_z;
+        		            call rely();
+        		            assert Gamma_r1;
                         block := 1;
                     } else {
                         block := -1;
@@ -56,13 +56,13 @@ procedure read() returns (y: int, Gamma_y: bool)
                 } else if (block == 1) {
                     if ((r1 mod 2) != 0) {
                         call rely();
-            		    r1, Gamma_r1 := z, Gamma_z;
-            		    call rely();
+            		        r1, Gamma_r1 := z, Gamma_z;
+            		        call rely();
                     } else {
                         call rely();
-        		        r2, Gamma_r2 := x, Gamma_x;
+        		            r2, Gamma_r2 := x, Gamma_x;
                         old_z := z;
-        		        call rely();
+        		            call rely();
                         block := 0;
                     }
                 }

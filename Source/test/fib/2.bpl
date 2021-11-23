@@ -11,11 +11,11 @@ procedure fib2()
   call u := unknown();
   while(u) {
     z := z + x + y + w;
-	y := y + 1;
-	if(z mod 2==1) 
-	  x := x + 1;
-	}
-	w := w + 2;
+    y := y + 1;
+	  if(z mod 2==1) {
+	    x := x + 1;
+	  }
+	  w := w + 2;
     call u := unknown();	
   }
   assert(x==y);

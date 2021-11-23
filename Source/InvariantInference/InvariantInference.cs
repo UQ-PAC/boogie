@@ -124,7 +124,7 @@ namespace Microsoft.Boogie.InvariantInference {
           }
         }
       }
-
+      
       return null;
     }
 
@@ -165,24 +165,24 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr I = StoVC(mathSAT.CalculateInterpolant(), gen, translator, scopeVars);
           VCExpr notI = gen.NotSimp(I);
           if (isInductive(notI, loopPathsBack, K, prover)) {
-            if (satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
-              if (satisfiable(gen.ImpliesSimp(gen.AndSimp(I, gen.NotSimp(K)), loopQ), prover)) {
+            //if (satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
+              //if (satisfiable(gen.ImpliesSimp(gen.AndSimp(I, gen.NotSimp(K)), loopQ), prover)) {
                 return notI; // found invariant
-              }
-              Debug.Print("this shouldn't happen?");
-            }
-            Debug.Print("this shouldn't happen?");
+              //}
+              //Debug.Print("this shouldn't happen?");
+            //}
+           // Debug.Print("this shouldn't happen?");
           }
-          B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, pathWP(loopPathsBack, I, gen, translator)))); // guard is implicitly included in WP via boogie's assumes
+          B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, pathWP(loopPathsBack, I, gen, translator)))); 
           r++;
-          A.Insert(t + 1, pathSP(loopPaths, gen.AndSimp(A[t], K), gen, translator)); // guard is implicitly included in SP via boogie's assumes
+          A.Insert(t + 1, pathSP(loopPaths, gen.AndSimp(A[t], K), gen, translator));
           t++; 
         } else {
           if (r <= concrete) {
             return VCExpressionGenerator.True; // fail to find invariant
           } else {
             r = concrete;
-            B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, pathWP(loopPathsBack, B[r], gen, translator)))); // guard is implicitly included in WP via boogie's assumes
+            B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, pathWP(loopPathsBack, B[r], gen, translator)))); 
             r++;
             concrete++;
           }
@@ -268,10 +268,6 @@ namespace Microsoft.Boogie.InvariantInference {
           return VCExpressionGenerator.True;
         case "false":
           return VCExpressionGenerator.False;
-        case "abs":
-        case "distinct":
-          // need to figure out these?
-          return null;
         default:
           if (sexpr.Name.All(char.IsDigit)) {
             // int
@@ -287,6 +283,7 @@ namespace Microsoft.Boogie.InvariantInference {
           // can figure out floats, reals later
           break;
       }
+      Debug.Print("unimplemented: " + sexpr.Name);
       return null;
     }
 
@@ -312,12 +309,12 @@ namespace Microsoft.Boogie.InvariantInference {
 
     // shoul djust do this in mahsat eventually
     private static bool satisfiable(VCExpr predicate, ProverInterface prover) {
-      prover.BeginCheck("invariant inference check", prover.Context.ExprGen.NotSimp(predicate), null); // as far as I can tell, the ErrorHandler parameter here is not used at all and we don't want to use it anyway
+      prover.BeginCheck("invariant inference check", predicate, null); // as far as I can tell, the ErrorHandler parameter here is not used at all and we don't want to use it anyway
       ProverInterface.Outcome outcome = prover.CheckOutcomeBasic();
       switch (outcome) {
-        case (ProverInterface.Outcome.Invalid):
-          return true;
         case (ProverInterface.Outcome.Valid):
+          return true;
+        case (ProverInterface.Outcome.Invalid):
           return false;
         default:
           Debug.Print("error: " + outcome);
@@ -654,7 +651,8 @@ namespace Microsoft.Boogie.InvariantInference {
         SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
         VCExpr substP = substituter.Mutate(P, subst);
 
-        return gen.Exists(freshVars, new List<VCTrigger>(), substP);
+        return substP;
+        //return gen.Exists(freshVars, new List<VCTrigger>(), substP);
 
       } else if (cmd is AssignCmd) {
         // x := e -> exists x' :: P[x\x'] && x == e[x\x']
@@ -692,11 +690,13 @@ namespace Microsoft.Boogie.InvariantInference {
           substP = gen.AndSimp(substP, gen.Eq(assign.Item1, substRhs));
         }
         VCExpr sp = substP;
+        /*
         if (needExists) {
           sp = gen.Exists(freshVars, new List<VCTrigger>(), substP);
-        }
+        } */
 
         return sp;
+
       } else if (cmd is CallCmd) {
         CallCmd callCmd = (CallCmd)cmd;
         StateCmd desugar = callCmd.Desugaring as StateCmd;
