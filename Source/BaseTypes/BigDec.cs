@@ -105,6 +105,16 @@ namespace Microsoft.BaseTypes
       }
     }
 
+    public static bool TryParse(string v, out BigDec res) {
+      try {
+        res = BigDec.FromString(v);
+        return true;
+      } catch (FormatException) {
+        res = ZERO;
+        return false;
+      }
+    }
+
     internal BigDec(BIM mantissa, int exponent)
     {
       if (mantissa.IsZero)

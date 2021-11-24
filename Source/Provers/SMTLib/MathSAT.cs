@@ -72,7 +72,15 @@ namespace Microsoft.Boogie.SMTLib {
     }
 
     public bool Satisfiable(VCExpr A, VCExpr B, string AStr, string BStr) {
-      InterpolationSetup("interpolant", A, B);
+      string AStr2;
+      string BStr2;
+      InterpolationSetup("interpolant", A, B, out AStr2, out BStr2);
+      if (AStr == "") {
+        AStr = AStr2;
+      }
+      if (BStr == "") {
+        BStr = BStr2;
+      }
 
       SendThisVC("(push 1)");
 

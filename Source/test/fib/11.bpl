@@ -4,7 +4,6 @@ procedure fib11()
   var i: int;
   var j: int;
   
-  var u: bool;
   assume(j == 0);
   assume(x > 0);
   assume(i == 0);
@@ -15,5 +14,3 @@ procedure fib11()
   }
   assert(j == 2*x);
 }
-
-procedure unknown() returns (u: bool);

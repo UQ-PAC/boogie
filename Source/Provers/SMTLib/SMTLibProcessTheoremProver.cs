@@ -535,7 +535,7 @@ namespace Microsoft.Boogie.SMTLib
       }
     }
 
-    public void InterpolationSetup(string descriptiveName, VCExpr A, VCExpr B) {
+    public void InterpolationSetup(string descriptiveName, VCExpr A, VCExpr B, out string AStr, out string BStr) {
       if (options.SeparateLogFiles) {
         CloseLogFile(); // shouldn't really happen
       }
@@ -547,8 +547,8 @@ namespace Microsoft.Boogie.SMTLib
 
       PrepareCommon();
       FlushAndCacheCommons();
-      VCExpr2String(A, 1);
-      VCExpr2String(B, 1);
+      AStr = VCExpr2String(A, 1);
+      BStr = VCExpr2String(B, 1);
       FlushAxioms();
     }
 
@@ -567,16 +567,17 @@ namespace Microsoft.Boogie.SMTLib
         PrepareCommon();
         FlushAndCacheCommons();
         string SMTPred = VCExpr2String(predicate, 1);
-        if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
-          return SMTPred;
-        }
         FlushAxioms();
+        if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
+          return "";
+        }
         SendThisVC("(push 1)");
         SendThisVC("(assert " + SMTPred + ")");
         FlushLogFile();
         SendThisVC("(apply (then ctx-solver-simplify qe))");
 
         var resp = Process.GetProverResponse();
+        Debug.Print(resp.ToString());
         FlushLogFile();
         SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
         List<SExpr> goodOut = new List<SExpr>();
