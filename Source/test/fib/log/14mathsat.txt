@@ -1,0 +1,16 @@
+(set-option :print-success false)
+(set-info :smt-lib-version 2.6)
+; done setting options
+
+
+(declare-fun j () Int)
+(declare-fun m () Int)
+(declare-fun a () Int)
+(push 1)
+(define-fun A () Bool  (and (not (<= j m)) (not (=> (< m j) (and (>= a (- 0 m)) (<= a m))))))
+(define-fun B () Bool  (and (and (= a 0) (> m 0)) (= j 1)))
+(assert (! A :interpolation-group g1))
+(assert (! B :interpolation-group g2))
+(check-sat)
+(get-interpolant (g1))
+(pop 1)

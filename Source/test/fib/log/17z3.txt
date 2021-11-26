@@ -1,0 +1,25 @@
+(set-option :print-success false)
+(set-info :smt-lib-version 2.6)
+(set-option :smt.mbqi false)
+(set-option :model.compact false)
+(set-option :model.v2 true)
+(set-option :pp.bv_literals false)
+; done setting options
+
+
+(declare-fun tickleBool (Bool) Bool)
+(assert (and (tickleBool true) (tickleBool false)))
+(declare-fun turn () Int)
+(declare-fun k () Int)
+(declare-fun n () Int)
+(declare-fun i () Int)
+(declare-fun j () Int)
+(push 1)
+(set-info :boogie-vc-id |invariant inference check|)
+(set-option :timeout 0)
+(set-option :rlimit 0)
+(assert (not
+ (=> (and (and (not (not (= turn 0))) (not (= turn 3))) (not (= turn 3))) (or (=> (not (= turn 0)) (or (=> (not (= turn 1)) (or (=> (not (= turn 2)) (not (not (= turn 0)))) (=> (= turn 2) (not (not (= 0 0)))))) (=> (= turn 1) (or (=> (<= i j) (or (=> (not (= 2 2)) (not (not (= 2 0)))) (=> (= 2 2) (not (not (= 0 0)))))) (=> (< j i) (or (=> (not (= turn 2)) (not (not (= turn 0)))) (=> (= turn 2) (not (not (= 0 0)))))))))) (=> (= turn 0) (or (=> (<= n i) (or (=> (not (= 3 1)) (or (=> (not (= 3 2)) (not (not (= 3 0)))) (=> (= 3 2) (not (not (= 0 0)))))) (=> (= 3 1) (or (=> (<= i j) (or (=> (not (= 2 2)) (not (not (= 2 0)))) (=> (= 2 2) (not (not (= 0 0)))))) (=> (< j i) (or (=> (not (= 3 2)) (not (not (= 3 0)))) (=> (= 3 2) (not (not (= 0 0)))))))))) (=> (< i n) (or (=> (not (= 1 1)) (or (=> (not (= 1 2)) (not (not (= 1 0)))) (=> (= 1 2) (not (not (= 0 0)))))) (=> (= 1 1) (or (=> (<= i 0) (or (=> (not (= 2 2)) (not (not (= 2 0)))) (=> (= 2 2) (not (not (= 0 0)))))) (=> (< 0 i) (or (=> (not (= 1 2)) (not (not (= 1 0)))) (=> (= 1 2) (not (not (= 0 0))))))))))))))
+))
+(check-sat)
+(pop 1)

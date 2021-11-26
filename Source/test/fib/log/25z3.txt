@@ -1,0 +1,27 @@
+(set-option :print-success false)
+(set-info :smt-lib-version 2.6)
+(set-option :smt.mbqi false)
+(set-option :model.compact false)
+(set-option :model.v2 true)
+(set-option :pp.bv_literals false)
+; done setting options
+
+
+(declare-fun tickleBool (Bool) Bool)
+(assert (and (tickleBool true) (tickleBool false)))
+(declare-fun u () Bool)
+(declare-fun i () Int)
+(declare-fun j () Int)
+(declare-fun x () Int)
+(declare-fun y () Int)
+(declare-fun turn () Int)
+(declare-fun call0formal@u () Bool)
+(push 1)
+(set-info :boogie-vc-id |invariant inference check|)
+(set-option :timeout 0)
+(set-option :rlimit 0)
+(assert (not
+ (=> (and (and (not (<= (+ i (* (- 0 1) j)) (- 0 1))) u) u) (or (=> (not (= turn 0)) (or (=> (not (= turn 1)) (or (=> (not (= turn 2)) (forall ((call0formal@u@@0 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))) (=> (= turn 2) (or (=> (> j i) (forall ((call0formal@u@@1 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))) (=> (>= i j) (forall ((call0formal@u@@2 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))))))) (=> (= turn 1) (or (=> (not (= x y)) (forall ((call0formal@u@@3 Bool) )  (or (=> (not call0formal@u@@3) (forall ((call0formal@u@@4 Bool) )  (not (<= (+ i (* (- 0 1) (+ j 1))) (- 0 1))))) (=> call0formal@u@@3 (forall ((call0formal@u@@5 Bool) )  (not (<= (+ i (* (- 0 1) (+ j 1))) (- 0 1)))))))) (=> (= x y) (forall ((call0formal@u@@6 Bool) )  (or (=> (not call0formal@u@@6) (forall ((call0formal@u@@7 Bool) )  (not (<= (+ (+ i 1) (* (- 0 1) j)) (- 0 1))))) (=> call0formal@u@@6 (forall ((call0formal@u@@8 Bool) )  (not (<= (+ (+ i 1) (* (- 0 1) j)) (- 0 1)))))))))))) (=> (= turn 0) (forall ((call0formal@u@@9 Bool) )  (or (=> (not call0formal@u@@9) (or (=> (not (= 2 1)) (or (=> (not (= 2 2)) (forall ((call0formal@u@@10 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))) (=> (= 2 2) (or (=> (> j i) (forall ((call0formal@u@@11 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))) (=> (>= i j) (forall ((call0formal@u@@12 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))))))) (=> (= 2 1) (or (=> (not (= x y)) (forall ((call0formal@u@@13 Bool) )  (or (=> (not call0formal@u@@13) (forall ((call0formal@u@@14 Bool) )  (not (<= (+ i (* (- 0 1) (+ j 1))) (- 0 1))))) (=> call0formal@u@@13 (forall ((call0formal@u@@15 Bool) )  (not (<= (+ i (* (- 0 1) (+ j 1))) (- 0 1)))))))) (=> (= x y) (forall ((call0formal@u@@16 Bool) )  (or (=> (not call0formal@u@@16) (forall ((call0formal@u@@17 Bool) )  (not (<= (+ (+ i 1) (* (- 0 1) j)) (- 0 1))))) (=> call0formal@u@@16 (forall ((call0formal@u@@18 Bool) )  (not (<= (+ (+ i 1) (* (- 0 1) j)) (- 0 1)))))))))))) (=> call0formal@u@@9 (or (=> (not (= 1 1)) (or (=> (not (= 1 2)) (forall ((call0formal@u@@19 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))) (=> (= 1 2) (or (=> (> j i) (forall ((call0formal@u@@20 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))) (=> (>= i j) (forall ((call0formal@u@@21 Bool) )  (not (<= (+ i (* (- 0 1) j)) (- 0 1))))))))) (=> (= 1 1) (or (=> (not (= x y)) (forall ((call0formal@u@@22 Bool) )  (or (=> (not call0formal@u@@22) (forall ((call0formal@u@@23 Bool) )  (not (<= (+ i (* (- 0 1) (+ j 1))) (- 0 1))))) (=> call0formal@u@@22 (forall ((call0formal@u@@24 Bool) )  (not (<= (+ i (* (- 0 1) (+ j 1))) (- 0 1)))))))) (=> (= x y) (forall ((call0formal@u@@25 Bool) )  (or (=> (not call0formal@u@@25) (forall ((call0formal@u@@26 Bool) )  (not (<= (+ (+ i 1) (* (- 0 1) j)) (- 0 1))))) (=> call0formal@u@@25 (forall ((call0formal@u@@27 Bool) )  (not (<= (+ (+ i 1) (* (- 0 1) j)) (- 0 1)))))))))))))))))
+))
+(check-sat)
+(pop 1)

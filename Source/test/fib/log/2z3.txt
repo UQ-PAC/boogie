@@ -1,0 +1,28 @@
+(set-option :print-success false)
+(set-info :smt-lib-version 2.6)
+(set-option :smt.mbqi false)
+(set-option :model.compact false)
+(set-option :model.v2 true)
+(set-option :pp.bv_literals false)
+; done setting options
+
+
+(declare-fun tickleBool (Bool) Bool)
+(assert (and (tickleBool true) (tickleBool false)))
+(declare-fun u () Bool)
+(declare-fun x () Int)
+(declare-fun y () Int)
+(declare-fun i () Int)
+(declare-fun j () Int)
+(declare-fun z () Int)
+(declare-fun w () Int)
+(declare-fun call0formal@u () Bool)
+(push 1)
+(set-info :boogie-vc-id |invariant inference check|)
+(set-option :timeout 0)
+(set-option :rlimit 0)
+(assert (not
+ (=> (and (and (not (not (= x y))) u) u) (or (=> (not (= (mod (+ (+ (+ z x) y) w) 2) 1)) (forall ((call0formal@u@@0 Bool) )  (not (not (= x (+ y 1)))))) (=> (= (mod (+ (+ (+ z x) y) w) 2) 1) (forall ((call0formal@u@@1 Bool) )  (not (not (= (+ x 1) (+ y 1))))))))
+))
+(check-sat)
+(pop 1)

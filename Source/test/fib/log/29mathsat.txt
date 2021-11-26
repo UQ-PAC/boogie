@@ -1,0 +1,22 @@
+(set-option :print-success false)
+(set-info :smt-lib-version 2.6)
+; done setting options
+
+
+(declare-fun u () Bool)
+(declare-fun a () Int)
+(declare-fun c () Int)
+(declare-fun b () Int)
+(declare-fun d () Int)
+(declare-fun x () Int)
+(declare-fun y () Int)
+(declare-fun turn () Int)
+(declare-fun call0formal@u () Bool)
+(push 1)
+(define-fun A () Bool  (and (not u) (not (=> (not u) (= (+ a c) (+ b d))))))
+(define-fun B () Bool  (and (and (and (and (and (and (and (= a 1) (= b 1)) (= c 2)) (= d 2)) (= x 3)) (= y 3)) (= turn 0)) (= u call0formal@u)))
+(assert (! A :interpolation-group g1))
+(assert (! B :interpolation-group g2))
+(check-sat)
+(get-interpolant (g1))
+(pop 1)

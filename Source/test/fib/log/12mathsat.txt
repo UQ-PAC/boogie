@@ -1,0 +1,19 @@
+(set-option :print-success false)
+(set-info :smt-lib-version 2.6)
+; done setting options
+
+
+(declare-fun turn () Int)
+(declare-fun y () Int)
+(declare-fun t () Int)
+(declare-fun s () Int)
+(declare-fun a () Int)
+(declare-fun b () Int)
+(push 1)
+(define-fun A () Bool  (and (not (not (= turn 4))) (not (=> (= turn 4) (<= y 4)))))
+(define-fun B () Bool  (and (and (and (and (= t 0) (= s 0)) (= a 0)) (= b 0)) (= turn 0)))
+(assert (! A :interpolation-group g1))
+(assert (! B :interpolation-group g2))
+(check-sat)
+(get-interpolant (g1))
+(pop 1)

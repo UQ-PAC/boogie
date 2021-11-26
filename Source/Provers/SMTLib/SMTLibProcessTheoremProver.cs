@@ -569,7 +569,7 @@ namespace Microsoft.Boogie.SMTLib
         string SMTPred = VCExpr2String(predicate, 1);
         FlushAxioms();
         if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
-          return "";
+          return ""; // should make this better
         }
         SendThisVC("(push 1)");
         SendThisVC("(assert " + SMTPred + ")");
@@ -577,15 +577,16 @@ namespace Microsoft.Boogie.SMTLib
         SendThisVC("(apply (then ctx-solver-simplify qe))");
 
         var resp = Process.GetProverResponse();
-        Debug.Print(resp.ToString());
+        Console.WriteLine(SMTPred);
+        Console.WriteLine(resp.ToString());
         FlushLogFile();
-        SendThisVC("(pop 1)");  // need to figure out how to not break Pop();
+        SendThisVC("(pop 1)"); 
         List<SExpr> goodOut = new List<SExpr>();
 
         if (resp.Name == "goals") {
           // assume only single goal for now
           if (resp.ArgCount != 1) {
-            Debug.Print("quantifier elimination goals != 1");
+            throw new NotImplementedException("quantifier elimination goals != 1");
           }
           var goal = resp.Arguments[0];
           if (goal.Name == "goal") {
