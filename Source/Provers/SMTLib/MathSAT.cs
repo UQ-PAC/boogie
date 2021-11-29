@@ -112,7 +112,7 @@ namespace Microsoft.Boogie.SMTLib {
     public SExpr CalculateInterpolant() {
       SendThisVC("(get-interpolant (g1))");
       SExpr resp = Process.GetProverResponse();
-      Console.WriteLine("interpolant: " + resp.ToString());
+      //Console.WriteLine("interpolant: " + resp.ToString());
       SendThisVC("(pop 1)"); 
       FlushLogFile();
 

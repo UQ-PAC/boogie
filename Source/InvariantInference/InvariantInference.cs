@@ -190,6 +190,18 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr I = StoVC(resp, gen, translator, scopeVars);
           VCExpr notI = gen.NotSimp(I);
           if (isInductive(notI, loopHead, loopBody, K, prover)) {
+            /*
+            if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
+              throw new Exception("generated invariant doesn't satisfy I & !K ==> Q");
+            }
+            if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
+              throw new Exception("generated invariant doesn't satisfy P ==> I");
+            }
+            */
+            if (satisfiable(gen.NotSimp(gen.AndSimp(notI, gen.NotSimp(K))), prover)) {
+              throw new Exception("invariant is guard or weaker version of it");
+            }
+
             return notI; // found invariant
           }
           B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody, gen, translator)))); 
@@ -290,18 +302,22 @@ namespace Microsoft.Boogie.InvariantInference {
         default:
           BigNum num;
           BigDec dec;
-          if (BigNum.TryParse(sexpr.Name, out num)) {
-            // int
-            return gen.Integer(num);
-          } else if (BigDec.TryParse(sexpr.Name, out dec)) {
-            // real
-            return gen.Real(dec);
-          } else {
-            // identifier
-            foreach (Variable v in scopeVars) {
-              if (v.Name == sexpr.Name) {
-                return translator.LookupVariable(v);
-              }
+          if (sexpr.Name.All(Char.IsDigit)) {
+            if (BigNum.TryParse(sexpr.Name, out num)) {
+              // int
+              return gen.Integer(num);
+            }
+          } 
+          if (sexpr.Name.All(c => Char.IsDigit(c) || c == '.' || c == 'e')) {
+            if (BigDec.TryParse(sexpr.Name, out dec)) {
+              // real
+              return gen.Real(dec);
+            }
+          } 
+          // identifier
+          foreach (Variable v in scopeVars) {
+            if (v.Name.Equals(sexpr.Name)) {
+              return translator.LookupVariable(v);
             }
           }
           // can figure out floats later
@@ -345,6 +361,8 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpressionGenerator gen = prover.Context.ExprGen;
       VCExpr loopBodyWP = setWP(loopHead, loopHead, invarCandidate, loopBody, gen, translator);
       VCExpr imp = gen.ImpliesSimp(gen.And(invarCandidate, guard), loopBodyWP);
+      //VCExpr loopBodySP = setSP(loopHead, loopHead, gen.And(invarCandidate, guard), loopBody, gen, translator);
+      //VCExpr imp = gen.ImpliesSimp(loopBodySP, invarCandidate);
       return satisfiable(imp, prover);
     }
 
@@ -505,12 +523,12 @@ namespace Microsoft.Boogie.InvariantInference {
       while (toTry.Count != 0) {
         Block currentBlock = toTry.Dequeue();
         GotoCmd successors = currentBlock.TransferCmd as GotoCmd;
-        VCExpr blockQ_In = VCExpressionGenerator.False;
+        VCExpr blockQ_In = VCExpressionGenerator.True;
         bool successorsDone = true;
         foreach (Block successor in successors.labelTargets) {
           if (blocks.Contains(successor)) {
             if (blockWPs.ContainsKey(successor)) {
-              blockQ_In = gen.OrSimp(blockWPs[successor], blockQ_In);
+              blockQ_In = gen.AndSimp(blockWPs[successor], blockQ_In);
             } else {
               successorsDone = false;
               break;

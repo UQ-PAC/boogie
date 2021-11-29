@@ -553,63 +553,64 @@ namespace Microsoft.Boogie.SMTLib
     }
 
     public override string EliminateQuantifiers(VCExpr predicate) {
-      if (options.Solver == SolverKind.Z3) {
-        if (options.SeparateLogFiles) {
-          CloseLogFile(); // shouldn't really happen
+      if (options.Solver != SolverKind.Z3) {
+        throw new Exception("qe only supported in Z3");
+      }
+      if (options.SeparateLogFiles) {
+        CloseLogFile(); // shouldn't really happen
+      }
+
+      if (options.LogFilename != null && currentLogFile == null) {
+        currentLogFile = OpenOutputFile("eliminate quantifiers");
+        currentLogFile.Write(common.ToString());
+      }
+      //SendCommon("(set-option :")
+
+      PrepareCommon();
+      FlushAndCacheCommons();
+      string SMTPred = VCExpr2String(predicate, 1);
+      FlushAxioms();
+      if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
+        return ""; // should make this better
+      }
+      SendThisVC("(push 1)");
+      SendThisVC("(assert " + SMTPred + ")");
+      FlushLogFile();
+      SendThisVC("(apply qe)");
+
+      var resp = Process.GetProverResponse();
+      //Console.WriteLine(SMTPred);
+      //Console.WriteLine(resp.ToString());
+      FlushLogFile();
+      SendThisVC("(pop 1)"); 
+      List<SExpr> goodOut = new List<SExpr>();
+
+      if (resp.Name == "goals") {
+        // assume only single goal for now
+        if (resp.ArgCount != 1) {
+          throw new NotImplementedException("quantifier elimination goals != 1");
         }
-
-        if (options.LogFilename != null && currentLogFile == null) {
-          currentLogFile = OpenOutputFile("eliminate quantifiers");
-          currentLogFile.Write(common.ToString());
-        }
-        //SendCommon("(set-option :")
-
-        PrepareCommon();
-        FlushAndCacheCommons();
-        string SMTPred = VCExpr2String(predicate, 1);
-        FlushAxioms();
-        if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
-          return ""; // should make this better
-        }
-        SendThisVC("(push 1)");
-        SendThisVC("(assert " + SMTPred + ")");
-        FlushLogFile();
-        SendThisVC("(apply (then ctx-solver-simplify qe))");
-
-        var resp = Process.GetProverResponse();
-        Console.WriteLine(SMTPred);
-        Console.WriteLine(resp.ToString());
-        FlushLogFile();
-        SendThisVC("(pop 1)"); 
-        List<SExpr> goodOut = new List<SExpr>();
-
-        if (resp.Name == "goals") {
-          // assume only single goal for now
-          if (resp.ArgCount != 1) {
-            throw new NotImplementedException("quantifier elimination goals != 1");
-          }
-          var goal = resp.Arguments[0];
-          if (goal.Name == "goal") {
-            foreach (SExpr arg in goal.Arguments) {
-              if (arg.Name == "let") {
-                // need to figure out how to resolve lets? or option to make Z3 not output them
-                Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
-                goodOut.Add(SExpr.ResolveLet(arg, letDefs));
-              } else if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
-                // remove extraneous output such as ticklebool & precision info
-                goodOut.Add(arg);
-              }
-
+        var goal = resp.Arguments[0];
+        if (goal.Name == "goal") {
+          foreach (SExpr arg in goal.Arguments) {
+            if (arg.Name == "let") {
+              // need to figure out how to resolve lets? or option to make Z3 not output them
+              Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
+              goodOut.Add(SExpr.ResolveLet(arg, letDefs));
+            } else if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
+              // remove extraneous output such as ticklebool & precision info
+              goodOut.Add(arg);
             }
+
           }
-        }
-        if (goodOut.Count() > 1) {
-          return new SExpr("and", goodOut).ToString();
-        } else if (goodOut.Count() == 1) {
-          return goodOut[0].ToString();
         }
       }
-      return null;
+      if (goodOut.Count() > 1) {
+        return new SExpr("and", goodOut).ToString();
+      } else if (goodOut.Count() == 1) {
+        return goodOut[0].ToString();
+      }
+      throw new Exception("error in converting solver output from qe: " + resp.ToString());
     }
 
     public override void BeginCheck(string descriptiveName, VCExpr vc, ErrorHandler handler)

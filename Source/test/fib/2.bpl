@@ -8,7 +8,7 @@ procedure fib2()
   y := 0;
   w := 0;
   
-  call u := unknown();
+  //call u := unknown();
   while(u) {
     z := z + x + y + w;
     y := y + 1;
@@ -16,7 +16,7 @@ procedure fib2()
 	    x := x + 1;
 	  }
 	  w := w + 2;
-    call u := unknown();	
+    //call u := unknown();	
   }
   assert(x==y);
 }

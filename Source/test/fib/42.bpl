@@ -12,7 +12,7 @@ procedure fib42()
 	assume(y == 1);
 	assume((flag == 1 && a == 0) || (flag != 1 && a == 1));
 
-	call u := unknown();
+	//call u := unknown();
 	while(u){
 		if(flag == 1) {
 			a := x + y;
@@ -27,9 +27,9 @@ procedure fib42()
 			y := y + 1;
 		}
 		else{
-			x := x + 1; // currently fails due to interpolant containing real division
+			x := x + 1;
 		}
-		call u := unknown();
+		//call u := unknown();
 	}
 
 	assert((flag != 1) || (a mod 2 == 0));	

@@ -13,7 +13,7 @@ procedure fib46()
   assume(x == 0);
   assume(y == 0);
 
-  call u := unknown();
+  //call u := unknown();
   while(u){
     if(w mod 2 == 1){
       x := x + 1;
@@ -25,7 +25,7 @@ procedure fib46()
     }
 
     w := w + 2;
-    call u := unknown();
+    //call u := unknown();
   }
 
   assert(x <= 1);

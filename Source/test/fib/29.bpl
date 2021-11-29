@@ -19,7 +19,7 @@ procedure fib29()
 	assume(y == 3);
 	assume(turn == 0);
 
-  call u := unknown();
+  //call u := unknown();
 	while(u){
 		if(turn == 0){
 			x := a + c;
@@ -49,7 +49,7 @@ procedure fib29()
 			}
 
 		}
-    call u := unknown();
+    //call u := unknown();
 	}
 
 	assert(a + c == b + d);	

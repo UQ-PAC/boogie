@@ -12,7 +12,7 @@ procedure fib14()
   assume(j == 1);
 
   while(j <= m){
-    call u := unknown();
+    //call u := unknown();
     if(u){
       a := a + 1;
     }

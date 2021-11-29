@@ -12,12 +12,12 @@ procedure fib43()
 	assume(i == 0);
 	assume(t == y);
 
-  call u := unknown();
+  //call u := unknown();
 	while(u){
 		if(x > 0){
 			y := y + x;
 		}
-    call u := unknown();
+    //call u := unknown();
 	}
 
 	assert(y >= t);	
