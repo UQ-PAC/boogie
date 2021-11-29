@@ -1,28 +1,37 @@
-procedure unknown() returns (u: bool);
-
 procedure fib14()
 {
-  var u: bool;
   var a: int;
   var j: int;
   var m: int;
 
-  assume(a == 0);
-  assume(m > 0);
-  assume(j == 1);
+  anon0:
+    assume a == 0;
+    assume m > 0;
+    assume j == 1;
+    goto anon6_LoopHead;
 
-  while(j <= m){
-    //call u := unknown();
-    if(u){
-      a := a + 1;
-    }
-    else{
-      a := a - 1;
-    }
+  anon6_LoopHead:
+    goto anon6_LoopDone, anon6_LoopBody;
 
+  anon6_LoopBody:
+    assume {:partition} j <= m;
+    goto anon7_Then, anon7_Else;
+
+  anon7_Else:
+    a := a - 1;
+    goto anon4;
+
+  anon4:
     j := j + 1;
-  }
+    goto anon6_LoopHead;
 
-  assert(a >= -m);
-  assert(a <= m);
+  anon7_Then:
+    a := a + 1;
+    goto anon4;
+
+  anon6_LoopDone:
+    assume {:partition} m < j;
+    assert a >= -m;
+    assert a <= m;
+    return;
 }
