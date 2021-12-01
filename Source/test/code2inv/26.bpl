@@ -1,0 +1,17 @@
+procedure main() {
+  // variable declarations
+  var n:int;
+  var x:int;
+  // pre-conditions
+  x := n;
+  // loop body
+  while (((x > 1))) {
+    x  := (x - 1);
+
+  }
+  // post-condition
+if ( (x != 1) ) {
+  assert( (n < 0) );
+}
+
+}
