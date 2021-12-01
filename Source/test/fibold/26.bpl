@@ -16,7 +16,7 @@ procedure fib26()
 	assume(y == 0);
 	assume(turn == 0);
 
-  call u := unknown();
+  //call u := unknown();
 	while(u){
 		if(turn == 0){
       call u := unknown();
@@ -58,7 +58,7 @@ procedure fib26()
 			}
 		}
 
-    call u := unknown();
+    //call u := unknown();
 	}
 
 	assert(x == y);	

@@ -6,13 +6,13 @@ procedure fib1() {
   assume(x == 1);
   assume(y == 1);
   
-  call u := unknown();
+  //call u := unknown();
   while(u){
     t1 := x;
-	t2 := y;
-	x := t1 + t2;
-	y := t1 + t2;
-	call u := unknown();
+	  t2 := y;
+	  x := t1 + t2;
+	  y := t1 + t2;
+	//call u := unknown();
   }
   assert(y >= 1);	
 }

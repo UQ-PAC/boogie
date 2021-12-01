@@ -11,7 +11,7 @@ procedure fib10()
   assume(x == 0);
   assume(y == 0);
 
-  call u := unknown();
+  //call u := unknown();
   while(u) {
     if (w == 1) {
         x := x + 1;
@@ -21,7 +21,7 @@ procedure fib10()
         y := y + 1;
         z := 1;
     }
-    call u := unknown();	
+    //call u := unknown();	
   }
   assert(x == y);
 }

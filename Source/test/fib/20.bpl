@@ -1,39 +1,57 @@
-procedure unknown() returns (u: bool);
-
 procedure fib20()
 {
-	var u: bool;
-	var x: int;
-	var y: int;
-	var k: int;
-	var j: int;
-	var i: int;
-	var n: int;
-	var m: int;
+  var x: int;
+  var y: int;
+  var k: int;
+  var j: int;
+  var i: int;
+  var n: int;
+  var m: int;
 
-	assume(x+y == k);
-	assume(m == 0);
-	assume(j == 0);
+  anon0:
+    assume x + y == k;
+    assume m == 0;
+    assume j == 0;
+    goto anon8_LoopHead;
 
-	while(j < n){
-		if(j == i){
-			x := x + 1;
-			y := y - 1;
-		}
-		else{
-			x := x - 1;
-			y := y + 1;
-		}
+  anon8_LoopHead:
+    goto anon8_LoopDone, anon8_LoopBody;
 
+  anon8_LoopBody:
+    assume {:partition} j < n;
+    goto anon9_Then, anon9_Else;
+
+  anon9_Else:
+    assume {:partition} j != i;
+    x := x - 1;
+    y := y + 1;
+    goto anon4;
+
+  anon4:
     call u := unknown();
-		if(u){
-			m := j;
-		}
+    goto anon10_Then, anon10_Else;
 
-		j := j + 1;
-	}
+  anon10_Else:
+    goto anon6;
 
-	assert(x + y == k);
-	assert((n <= 0) || (0 <= m));
-	assert((n <= 0) || (m <= n));
+  anon6:
+    j := j + 1;
+    goto anon8_LoopHead;
+
+  anon10_Then:
+    m := j;
+    goto anon6;
+
+  anon9_Then:
+    assume {:partition} j == i;
+    x := x + 1;
+    y := y - 1;
+    goto anon4;
+
+  anon8_LoopDone:
+    assume {:partition} n <= j;
+    assert x + y == k;
+    assert n <= 0 || 0 <= m;
+    assert n <= 0 || m <= n;
+    return;
 }

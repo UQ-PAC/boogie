@@ -41,3 +41,5 @@ Source/*.userprefs
 
 Source/BoogieDriver/Properties/launchSettings.json
 /Source/*.txt
+/Source/test/fib/absintlog
+*.1

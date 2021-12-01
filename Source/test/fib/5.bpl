@@ -6,16 +6,16 @@ procedure fib5(flag: bool)
   x := 0;
   y := 0;
   
-  call u := unknown();
+  //call u := unknown();
   while(u) {
     x := x + 1;
-	y := y + 1;
-	i := i + x;
-	j := j + y;
-	if (flag) {
-	  j := j + 1;
-	}
-    call u := unknown();	
+	  y := y + 1;
+	  i := i + x;
+	  j := j + y;
+	  if (flag) {
+	    j := j + 1;
+	  }
+    //call u := unknown();	
   }
   assert(j>=i);
 }

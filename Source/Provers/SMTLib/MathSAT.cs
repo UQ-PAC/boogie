@@ -103,8 +103,7 @@ namespace Microsoft.Boogie.SMTLib {
       } else if (resp.Name != "unsat") {
         SendThisVC("(pop 1)");
         FlushLogFile();
-        Debug.Print("unexpected prover response " + resp);
-        return true;
+        throw new ProverException("unexpected prover response " + resp);
       }
       return false;
     }
@@ -113,7 +112,7 @@ namespace Microsoft.Boogie.SMTLib {
     public SExpr CalculateInterpolant() {
       SendThisVC("(get-interpolant (g1))");
       SExpr resp = Process.GetProverResponse();
-      Debug.Print(resp.ToString());
+      //Console.WriteLine("interpolant: " + resp.ToString());
       SendThisVC("(pop 1)"); 
       FlushLogFile();
 
