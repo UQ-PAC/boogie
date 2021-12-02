@@ -19,8 +19,8 @@ namespace Microsoft.Boogie.InvariantInference {
       ProverInterface prover = ProverInterface.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
         CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit);
 
-      MathSAT mathSAT = MathSAT.CreateProver(program, CommandLineOptions.Clo.MathSATLogFilePath,
-        CommandLineOptions.Clo.MathSATLogFileAppend, CommandLineOptions.Clo.TimeLimit);
+      InterpolationProver interpol = InterpolationProver.CreateProver(program, CommandLineOptions.Clo.InterpolationLogFilePath,
+        CommandLineOptions.Clo.InterpolationLogFileAppend, CommandLineOptions.Clo.TimeLimit);
 
       // z3 apparently has a new interpolant algorithm - we should try it as well to compare
 
@@ -51,7 +51,7 @@ namespace Microsoft.Boogie.InvariantInference {
                 } else {
                   backEdgeFound = true;
 
-                  VCExpr invariant = InferLoopInvariant(program, procedureImplementations, impl, b, prover, mathSAT, scopeVars);
+                  VCExpr invariant = InferLoopInvariant(program, procedureImplementations, impl, b, prover, interpol, scopeVars);
                   Instrument(b, invariant, scopeVars);
                 }
               }
@@ -137,20 +137,34 @@ namespace Microsoft.Boogie.InvariantInference {
       } else if (vc is VCExprVar) {
         VCExprVar vcVar = vc as VCExprVar;
         foreach (Variable v in scopeVars) {
-          // this might be a little naive - variables can be distinct yet share a name - but shouldn't be an issue here
+          // this might be a little naive - variables can be distinct yet share a name - but shouldn't be an issue here?
           if (vcVar.Name == v.Name) {
             IdentifierExpr i = new IdentifierExpr(Token.NoToken, vcVar.Name);
             i.Decl = v;
             return i;
           }
         }
+      } else if (vc is VCExprLet) {
+        VCExprLet vcLet = vc as VCExprLet;
+        List<Variable> dummies = new List<Variable>();
+        List<Expr> rhss = new List<Expr>();
+        for (int i = 0; i < vcLet.Count(); i++) {
+          VCExprLetBinding binding = vcLet[i];
+          dummies.Add(new BoundVariable(Token.NoToken, new TypedIdent(Token.NoToken, binding.V.Name, binding.V.Type)));
+          rhss.Add(VCtoExpr(binding.E, scopeVars));
+        }
+
+        IEnumerable<Variable> scopeVarsWithBound = scopeVars.Concat(dummies);
+        Expr body = VCtoExpr(vcLet.Body, scopeVarsWithBound);
+
+        return new LetExpr(Token.NoToken, dummies, rhss, null, body);
       }
 
       throw new NotImplementedException("unimplemented for conversion to Expr: " + vc);
     }
 
     private static VCExpr InferLoopInvariant(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
-      ProverInterface prover, MathSAT mathSAT, IEnumerable<Variable> scopeVars) {
+      ProverInterface prover, InterpolationProver interpol, IEnumerable<Variable> scopeVars) {
       Boogie2VCExprTranslator translator = prover.Context.BoogieExprTranslator;
       VCExpressionGenerator gen = prover.Context.ExprGen;
 
@@ -180,14 +194,15 @@ namespace Microsoft.Boogie.InvariantInference {
       int t = 0;
       int r = 0;
       int concrete = 0;
-
+      int iterations = 0;
       while (true) {
+        iterations++;
         VCExpr ADisjunct = listDisjunction(A, gen);
         String B_rElim = prover.EliminateQuantifiers(B[r]);
         String ADisjunctElim = prover.EliminateQuantifiers(ADisjunct);
-        if (!mathSAT.Satisfiable(B[r], ADisjunct, B_rElim, ADisjunctElim)) {
-          SExpr resp = mathSAT.CalculateInterpolant();
-          VCExpr I = StoVC(resp, gen, translator, scopeVars);
+        if (!interpol.Satisfiable(B[r], ADisjunct, B_rElim, ADisjunctElim)) {
+          SExpr resp = interpol.CalculateInterpolant();
+          VCExpr I = StoVC(resp, gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
           VCExpr notI = gen.NotSimp(I);
           if (isInductive(notI, loopHead, loopBody, K, prover)) {
             /*
@@ -201,7 +216,7 @@ namespace Microsoft.Boogie.InvariantInference {
             if (satisfiable(gen.NotSimp(gen.AndSimp(notI, gen.NotSimp(K))), prover)) {
               throw new Exception("invariant is guard or weaker version of it");
             }
-
+            Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
             return notI; // found invariant
           }
           B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody, gen, translator)))); 
@@ -210,6 +225,7 @@ namespace Microsoft.Boogie.InvariantInference {
           t++; 
         } else {
           if (r <= concrete) {
+            Console.WriteLine("failed after " + iterations + "iterations");
             return VCExpressionGenerator.True; // fail to find invariant
           } else {
             r = concrete;
@@ -219,15 +235,37 @@ namespace Microsoft.Boogie.InvariantInference {
           }
         }
       }
+      Console.WriteLine("gave up on finding invariant after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
+      return VCExpressionGenerator.True;
     }
 
-    private static VCExpr StoVC(SExpr sexpr, VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars) {
+    private static VCExpr StoVC(SExpr sexpr, VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, Dictionary<String, VCExprVar> boundVars) {
       // still need to add floats
+      if (sexpr.Name == "let") {
+        List<VCExprLetBinding> bindings = new List<VCExprLetBinding>();
+        Dictionary<String, VCExprVar> boundVarsUpdate = new Dictionary<String, VCExprVar>(boundVars);
+        foreach (SExpr def in sexpr.Arguments[0].Arguments) {
+          VCExpr e = StoVC(def.Arguments[0], gen, translator, scopeVars, boundVars);
+          VCExprVar bound = gen.Variable(def.Name, e.Type);
+          boundVarsUpdate.Add(def.Name, bound);
+          bindings.Add(gen.LetBinding(bound, e));
+        }
+
+        VCExpr body = StoVC(sexpr.Arguments[1], gen, translator, scopeVars, boundVarsUpdate);
+
+        return gen.Let(bindings, body);
+      }
+
       List<VCExpr> args = new List<VCExpr>();
       foreach (SExpr arg in sexpr.Arguments) {
-        args.Add(StoVC(arg, gen, translator, scopeVars));
+        args.Add(StoVC(arg, gen, translator, scopeVars, boundVars));
       }
       switch (sexpr.Name) {
+        case "":
+          if (args.Count == 1) {
+            return args[0];
+          }
+          break;
         case "and":
           return gen.AndSimp(args[0], args[1]);
         case "or":
@@ -318,6 +356,11 @@ namespace Microsoft.Boogie.InvariantInference {
           foreach (Variable v in scopeVars) {
             if (v.Name.Equals(sexpr.Name)) {
               return translator.LookupVariable(v);
+            }
+          }
+          foreach (KeyValuePair<String, VCExprVar> kv in boundVars) {
+            if (kv.Key.Equals(sexpr.Name)) {
+              return kv.Value;
             }
           }
           // can figure out floats later
@@ -790,8 +833,8 @@ namespace Microsoft.Boogie.InvariantInference {
         /*
         if (needExists) {
           sp = gen.Exists(freshVars, new List<VCTrigger>(), substP);
-        } */
-
+        } 
+        */
         return sp;
 
       } else if (cmd is CallCmd) {

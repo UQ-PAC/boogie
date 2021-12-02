@@ -27,14 +27,25 @@ namespace Microsoft.Boogie.SMTLib
       this.options = options;
       smtProcessId = smtProcessIdSeq++;
 
-      var psi = new ProcessStartInfo(options.ExecutablePath(), options.SolverArguments.Concat(" "))
-      {
-        CreateNoWindow = true,
-        UseShellExecute = false,
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true
-      };
+      ProcessStartInfo psi;
+      if (options.Solver == SolverKind.SMTINTERPOL) {
+        string javaArgs = "-jar \"" + options.ExecutablePath() + "\" " + options.SolverArguments.Concat(" ");
+        psi = new ProcessStartInfo(options.JavaPath(), javaArgs) {
+          CreateNoWindow = true,
+          UseShellExecute = false,
+          RedirectStandardInput = true,
+          RedirectStandardOutput = true,
+          RedirectStandardError = true
+        };
+      } else {
+        psi = new ProcessStartInfo(options.ExecutablePath(), options.SolverArguments.Concat(" ")) {
+          CreateNoWindow = true,
+          UseShellExecute = false,
+          RedirectStandardInput = true,
+          RedirectStandardOutput = true,
+          RedirectStandardError = true
+        };
+      }
 
       if (options.Inspector != null)
       {

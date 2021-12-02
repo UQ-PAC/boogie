@@ -7,13 +7,18 @@ using System.Diagnostics;
 using Microsoft.Boogie.VCExprAST;
 
 namespace Microsoft.Boogie.SMTLib {
-  public class MathSAT : SMTLibProcessTheoremProver {
-    private MathSAT(SMTLibOptions libOptions, ProverOptions options, VCExpressionGenerator gen, SMTLibProverContext ctx) : base(libOptions, options, gen, ctx) {
+  public class InterpolationProver : SMTLibProcessTheoremProver {
+    private InterpolationProver(SMTLibOptions libOptions, ProverOptions options, VCExpressionGenerator gen, SMTLibProverContext ctx) : base(libOptions, options, gen, ctx) {
 
     }
 
-    public static MathSAT CreateProver(Program prog, string /*?*/ logFilePath, bool appendLogFile, uint timeout) {
-      ProverOptions options = new MathSATOptions();
+    public static InterpolationProver CreateProver(Program prog, string /*?*/ logFilePath, bool appendLogFile, uint timeout) {
+      ProverOptions options;
+      if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.MathSAT) {
+        options = new MathSATOptions();
+      } else {
+        options = new SMTInterpolOptions();
+      }
 
       if (logFilePath != null) {
         options.LogFilename = logFilePath;
@@ -26,7 +31,7 @@ namespace Microsoft.Boogie.SMTLib {
         options.TimeLimit = Util.BoundedMultiply(timeout, 1000);
       }
 
-      SMTLibOptions libOptions = CommandLineOptions.Clo; // not sure if need to override anything here specifically for MathSAT?
+      SMTLibOptions libOptions = CommandLineOptions.Clo;
 
       VCExpressionGenerator gen = new VCExpressionGenerator();
 
@@ -68,7 +73,7 @@ namespace Microsoft.Boogie.SMTLib {
         }
       }
 
-      return new MathSAT(libOptions, options, ctx.ExprGen, ctx);
+      return new InterpolationProver(libOptions, options, ctx.ExprGen, ctx);
     }
 
     public bool Satisfiable(VCExpr A, VCExpr B, string AStr, string BStr) {
@@ -84,13 +89,14 @@ namespace Microsoft.Boogie.SMTLib {
 
       SendThisVC("(push 1)");
 
-      // declare A & B as functions
-      SendThisVC("(define-fun A () Bool " + AStr + ")");
-      SendThisVC("(define-fun B () Bool " + BStr + ")");
-
       // define interpolation groups
-      SendThisVC("(assert (! A :interpolation-group g1))");
-      SendThisVC("(assert (! B :interpolation-group g2))");
+      if (options.Solver == SolverKind.MATHSAT) {
+        SendThisVC("(assert (! " + AStr + " :interpolation-group g1))");
+        SendThisVC("(assert (! " + BStr + " :interpolation-group g2))");
+      } else if (options.Solver == SolverKind.SMTINTERPOL) {
+        SendThisVC("(assert (! " + AStr + " :named g1))");
+        SendThisVC("(assert (! " + BStr + " :named g2))");
+      }
       // need to check sat before requesting interpolant
       SendCheckSat();
       SExpr resp = Process.GetProverResponse();
@@ -110,14 +116,20 @@ namespace Microsoft.Boogie.SMTLib {
 
     // must have called Satisfiable first
     public SExpr CalculateInterpolant() {
-      SendThisVC("(get-interpolant (g1))");
+      if (options.Solver == SolverKind.MATHSAT) {
+        SendThisVC("(get-interpolant (g1))");
+      } else if (options.Solver == SolverKind.SMTINTERPOL) {
+        SendThisVC("(get-interpolants g1 g2)");
+      }
+
       SExpr resp = Process.GetProverResponse();
       //Console.WriteLine("interpolant: " + resp.ToString());
       SendThisVC("(pop 1)"); 
       FlushLogFile();
 
-      Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
-      return SExpr.ResolveLet(resp, letDefs);
+      //Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
+      //return SExpr.ResolveLet(resp, letDefs);
+      return resp;
     }
 
   }
@@ -127,9 +139,21 @@ namespace Microsoft.Boogie.SMTLib {
     public MathSATOptions() {
       this.Solver = SolverKind.MATHSAT;
       SolverArguments.Add("-input=smt2");
-      SolverArguments.Add("-interpolation=TRUE");
       ProverName = "mathsat";
     }
 
   }
+
+  public class SMTInterpolOptions : SMTLibProverOptions {
+
+    public SMTInterpolOptions() {
+      this.Solver = SolverKind.SMTINTERPOL;
+      SolverArguments.Add("-q");
+      ProverName = "smtinterpol";
+      Logic = "QF_UFLIA";
+    }
+
+  }
+
 }
+

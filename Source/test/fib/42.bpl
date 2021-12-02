@@ -1,5 +1,3 @@
-procedure unknown() returns (u: bool);
-
 procedure fib42()
 {
   var u: bool;
@@ -29,7 +27,7 @@ procedure fib42()
 		else{
 			x := x + 1;
 		}
-		//call u := unknown();
+		havoc u;
 	}
 
 	assert((flag != 1) || (a mod 2 == 0));	

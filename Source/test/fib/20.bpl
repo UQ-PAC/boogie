@@ -28,7 +28,6 @@ procedure fib20()
     goto anon4;
 
   anon4:
-    call u := unknown();
     goto anon10_Then, anon10_Else;
 
   anon10_Else:

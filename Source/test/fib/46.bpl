@@ -25,7 +25,7 @@ procedure fib46()
     }
 
     w := w + 2;
-    //call u := unknown();
+    havoc u;
   }
 
   assert(x <= 1);

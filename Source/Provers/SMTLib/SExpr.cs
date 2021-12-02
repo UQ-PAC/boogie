@@ -88,7 +88,8 @@ namespace Microsoft.Boogie
       }
       else if (Name.Length == 0)
       {
-        sb.Append("()");
+        // this was not an accurate representation
+        //sb.Append("()");
       }
       else
       {

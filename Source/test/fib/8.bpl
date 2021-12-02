@@ -23,6 +23,7 @@ procedure fib8()
     goto anon8;
 
   anon8:
+    havoc u;
     goto anon10_LoopHead;
 
   anon12_Then:

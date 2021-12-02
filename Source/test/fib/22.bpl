@@ -13,7 +13,6 @@ procedure fib22()
 	assume(z == 0);
 	assume(k == 0);
 
-  //call u := unknown();
 	while(u){
 		if(k mod 3 == 0){
 			x := x + 1;
@@ -22,7 +21,7 @@ procedure fib22()
 		y := y + 1;
 		z := z + 1;
 		k := x + y + z;
-    //call u := unknown();
+    havoc u;
 	}
 
 	assert(x == y);

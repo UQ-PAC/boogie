@@ -39,7 +39,6 @@ procedure fib29()
 			if(turn == 1){
 				c := c - 1;
 				b := b - 1;
-        call u := unknown();
 				if(u){
 					turn := 1;
 				}
@@ -49,7 +48,7 @@ procedure fib29()
 			}
 
 		}
-    //call u := unknown();
+    havoc u;
 	}
 
 	assert(a + c == b + d);	

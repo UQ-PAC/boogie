@@ -17,7 +17,7 @@ procedure fib43()
 		if(x > 0){
 			y := y + x;
 		}
-    //call u := unknown();
+    havoc u;
 	}
 
 	assert(y >= t);	

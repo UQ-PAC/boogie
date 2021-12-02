@@ -30,7 +30,8 @@ namespace Microsoft.Boogie.SMTLib
     Z3,
     CVC5,
     YICES2,
-    MATHSAT
+    MATHSAT,
+    SMTINTERPOL
   }
 
   public class SMTLibProverOptions : ProverOptions

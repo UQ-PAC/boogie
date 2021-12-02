@@ -7,9 +7,7 @@ procedure main() {
   // pre-conditions
   c := 0;
   // loop body
-  call u := unknown();
   while (u) {
-      call u := unknown();
       if (u) {
         if ( (c != 40) )
         {
@@ -21,7 +19,7 @@ procedure main() {
         c  :=  1;
         }
       }
-      call u := unknown();
+      havoc u;
   }
   // post-condition
 if ( (c < 0) ) {

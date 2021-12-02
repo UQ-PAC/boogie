@@ -12,11 +12,9 @@ procedure fib9()
   assume(i == 0);
   assume(turn == 0);
 
-  call u := unknown();
   while(u) {
     if (turn == 0) {
       i := i + 1;
-      call u := unknown();
       if (u) {
         turn := 0;
       } else {
@@ -35,14 +33,12 @@ procedure fib9()
       t := i;
       i := i + 1;
       k := k + 1;
-      call u := unknown();
       if (u) {
         turn := 2;
       } else {
         turn := 3;
       }
     } else if (turn == 3) {
-      call u := unknown();
       if (u) {
         turn := 3;
       } else {
@@ -53,8 +49,7 @@ procedure fib9()
       n := i;
       turn := 5;
     }
+    havoc u;
   }
   assert(k >= 0);
 }
-
-procedure unknown() returns (u: bool);

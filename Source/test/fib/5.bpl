@@ -6,7 +6,6 @@ procedure fib5(flag: bool)
   x := 0;
   y := 0;
   
-  //call u := unknown();
   while(u) {
     x := x + 1;
 	  y := y + 1;
@@ -15,7 +14,7 @@ procedure fib5(flag: bool)
 	  if (flag) {
 	    j := j + 1;
 	  }
-    //call u := unknown();	
+    havoc u;
   }
   assert(j>=i);
 }

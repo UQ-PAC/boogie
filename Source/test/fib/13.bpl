@@ -18,6 +18,7 @@ procedure fib13()
       j := j + 2;
       k := k + 1;
     }
+    havoc u;
   }
 
   assert(k == 0 || j == (2*k) + 2);	

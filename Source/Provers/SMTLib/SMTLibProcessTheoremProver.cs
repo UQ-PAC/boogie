@@ -403,6 +403,10 @@ namespace Microsoft.Boogie.SMTLib
       {
         SendCommon("(set-option :print-success false)");
         SendCommon("(set-info :smt-lib-version 2.6)");
+        if (options.Solver == SolverKind.MATHSAT || options.Solver == SolverKind.SMTINTERPOL) {
+          SendCommon("(set-option :produce-interpolants true)");
+        }
+
         if (libOptions.ProduceModel)
         {
           SendCommon("(set-option :produce-models true)");
@@ -593,15 +597,20 @@ namespace Microsoft.Boogie.SMTLib
         var goal = resp.Arguments[0];
         if (goal.Name == "goal") {
           foreach (SExpr arg in goal.Arguments) {
-            if (arg.Name == "let") {
-              // need to figure out how to resolve lets? or option to make Z3 not output them
-              Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
-              goodOut.Add(SExpr.ResolveLet(arg, letDefs));
-            } else if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
+            if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
               // remove extraneous output such as ticklebool & precision info
               goodOut.Add(arg);
             }
-
+              /*
+              if (arg.Name == "let") {
+                // need to figure out how to resolve lets? or option to make Z3 not output them
+                Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
+                goodOut.Add(SExpr.ResolveLet(arg, letDefs));
+              } else if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
+                // remove extraneous output such as ticklebool & precision info
+                goodOut.Add(arg);
+              }
+              */
           }
         }
       }

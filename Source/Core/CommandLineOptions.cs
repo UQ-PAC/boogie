@@ -562,8 +562,8 @@ namespace Microsoft.Boogie
     public string ProverLogFilePath = null;
     public bool ProverLogFileAppend = false;
 
-    public string MathSATLogFilePath = null;
-    public bool MathSATLogFileAppend = false;
+    public string InterpolationLogFilePath = null;
+    public bool InterpolationLogFileAppend = false;
 
     public bool PrintInstrumented {
       get => printInstrumented;
@@ -803,6 +803,13 @@ namespace Microsoft.Boogie
     public bool UseAbstractInterpretation  { get; set; } = false;
     public bool InferInvariantsInterpolant { get; set; } = false;
 
+    public enum InterpolantSolver {
+      MathSAT,
+      SMTInterpol
+    }
+
+    public InterpolantSolver InterpolantSolverKind { get; set; } = InterpolantSolver.MathSAT;
+
     public string CivlDesugaredFile  { get; set; } = null;
 
     public bool TrustMoverTypes {
@@ -1017,9 +1024,23 @@ namespace Microsoft.Boogie
       switch (name)
       {
         case "inferinterpolant":
-          if (ps.ConfirmArgumentCount(0)) {
+          if (ps.args.Length == 0) {
+            InterpolantSolverKind = InterpolantSolver.MathSAT;
             InferInvariantsInterpolant = true;
-            Debug.Print("inferring invariant with craig interpolants");
+
+          } else if (ps.ConfirmArgumentCount(1)) {
+            InferInvariantsInterpolant = true;
+            switch (args[ps.i]) {
+              case "smtinterpol":
+                InterpolantSolverKind = InterpolantSolver.SMTInterpol;
+                break;
+              case "mathsat":
+                InterpolantSolverKind = InterpolantSolver.MathSAT;
+                break;
+              default:
+                ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);
+                break;
+            }
           }
 
           return true;
@@ -1157,9 +1178,9 @@ namespace Microsoft.Boogie
 
           return true;
 
-        case "mathSATLog":
+        case "interpolationProverLog":
           if (ps.ConfirmArgumentCount(1)) {
-            MathSATLogFilePath = args[ps.i];
+            InterpolationLogFilePath = args[ps.i];
           }
 
           return true;
@@ -1701,7 +1722,7 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("alwaysAssumeFreeLoopInvariants", ref AlwaysAssumeFreeLoopInvariants, true) ||
               ps.CheckBooleanFlag("proverHelp", ref proverHelpRequested) ||
               ps.CheckBooleanFlag("proverLogAppend", ref ProverLogFileAppend) ||
-              ps.CheckBooleanFlag("mathSATLogAppend", ref MathSATLogFileAppend) ||
+              ps.CheckBooleanFlag("interpolationLogAppend", ref InterpolationLogFileAppend) ||
               ps.CheckBooleanFlag("soundLoopUnrolling", ref SoundLoopUnrolling) ||
               ps.CheckBooleanFlag("checkInfer", ref InstrumentWithAsserts) ||
               ps.CheckBooleanFlag("restartProver", ref restartProverPerVc) ||
