@@ -11,14 +11,11 @@ procedure main() {
   assume((y <= 2));
   assume((y >= 0));
   // loop body
-  call u := unknown();
   while (u) {
     x  :=  (x + 2);
     y  :=  (y + 2);
-    call u := unknown();
+    havoc u;
   }
   // post-condition
-  if ( (y == 0) ) {
-    assert( (x != 4) );
-  }
+  assert( (y == 0) ==> (x != 4) );
 }

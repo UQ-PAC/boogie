@@ -1,8 +1,4 @@
-procedure fib12();
-
-
-
-implementation fib12()
+procedure fib12()
 {
   var t: int;
   var s: int;

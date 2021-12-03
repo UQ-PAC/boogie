@@ -8,7 +8,7 @@ procedure main() {
     c := 0;
     assume (n > 0);
 
-  while (u) {
+    while (u) {
         if(c == n) {
             c := 1;
         }
@@ -18,8 +18,6 @@ procedure main() {
         havoc u;
     }
 
-    if(c == n) {
-        assert( c >= 0);
+        assert((c == n) ==> c >= 0);
         //assert( c <= n);
-    }
 }

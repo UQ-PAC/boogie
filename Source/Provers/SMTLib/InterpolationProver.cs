@@ -89,6 +89,10 @@ namespace Microsoft.Boogie.SMTLib {
 
       SendThisVC("(push 1)");
 
+      if (options.Solver == SolverKind.SMTINTERPOL) {
+        SendThisVC("(set-option :" + Z3.TimeoutOption + " " + options.TimeLimit + ")");
+      }
+
       // define interpolation groups
       if (options.Solver == SolverKind.MATHSAT) {
         SendThisVC("(assert (! " + AStr + " :interpolation-group g1))");

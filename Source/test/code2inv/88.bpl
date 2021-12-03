@@ -11,7 +11,7 @@ procedure main() {
   lock := 0;
   // loop body
   while ((x != y)) {
-      call u := unknown();
+      havoc u;
       if (u) {
         lock  :=  1;
         x  :=  y;

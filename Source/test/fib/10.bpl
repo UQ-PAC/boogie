@@ -6,7 +6,7 @@ procedure fib10()
   var z: int;
   
   var u: bool;
-  assume(w == 0);
+  assume(w == 1);
   assume(z == 0);
   assume(x == 0);
   assume(y == 0);
@@ -24,5 +24,3 @@ procedure fib10()
   }
   assert(x == y);
 }
-
-procedure unknown() returns (u: bool);

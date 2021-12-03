@@ -16,7 +16,7 @@ procedure main() {
   while ((i < n)) {
     
     i  :=  (i + 1);
-    call u := unknown();
+    havoc u;
       if (u) {
         x  :=  (x + 1);
         y  :=  (y + 2);

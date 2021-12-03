@@ -10,15 +10,13 @@ procedure main()
     m := 0;
 
     while (x < n) {
-        call u := unknown();
+        havoc u;
         if (u) {
             m := x;
         }
         x := x + 1;
     }
 
-    if(n > 0) {
-       assert (m < n);
+       assert ((n > 0) ==> m < n);
        //assert (m >= 0);
-    }
 }

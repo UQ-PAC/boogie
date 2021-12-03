@@ -12,14 +12,11 @@ procedure main() {
   sn := 0;
   x := 0;
   // loop body
-  call u := unknown();
   while (u) {
     x  :=  (x + 1);
     sn  :=  (sn + 1);
-    call u := unknown();
+    havoc u;
   }
   // post-condition
-if ( (sn != -1) ) {
-  assert( (sn == x) );
-}
+  assert((sn != -1) ==> (sn == x) );
 }

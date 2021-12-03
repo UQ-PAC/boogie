@@ -12,7 +12,5 @@ procedure main() {
     x := (x + 1);
   }
   // post-condition
-if ( (x != n) ) {
-  assert( (n < 0) );
-}
+  assert((x != n) ==> (n < 0) );
 }

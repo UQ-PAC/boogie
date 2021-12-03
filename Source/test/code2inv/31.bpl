@@ -13,7 +13,6 @@ procedure main() {
 
   }
   // post-condition
-if ( (x != 1) ) {
-  assert( (n < 0) );
-}
+
+  assert((x != 1) ==> (n < 0) );
 }

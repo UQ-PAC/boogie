@@ -12,9 +12,8 @@ procedure main() {
   c := 0;
   assume((n > 0));
   // loop body
-  call u := unknown();
   while (u) {
-      call u := unknown();
+      havoc u;
       if (u) {
         if ( (c > n) )
         {
@@ -26,10 +25,9 @@ procedure main() {
         c  :=  1;
         }
       }
-      call u := unknown();
+      havoc u;
   }
   // post-condition
-if ( (n > -1) ) {
-  assert( (c != n) );
-}
+
+  assert((n > -1) ==> (c != n) );
 }

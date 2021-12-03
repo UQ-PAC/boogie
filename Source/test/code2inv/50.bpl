@@ -7,9 +7,8 @@ procedure main() {
   // pre-conditions
   c := 0;
   // loop body
-  call u := unknown();
   while (u) {
-      call u := unknown();
+      havoc u;
       if (u) {
         if ( (c != 4) )
         {
@@ -21,10 +20,9 @@ procedure main() {
         c  :=  1;
         }
       }
-      call u := unknown();
+      havoc u;
   }
   // post-condition
-if ( (c != 4) ) {
-  assert( (c >= 0) );
-}
+
+  assert((c != 4) ==> (c >= 0) );
 }

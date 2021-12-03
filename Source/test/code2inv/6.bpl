@@ -17,7 +17,5 @@ procedure main()
        }
     }
 
-    if(size > 0) {
-       assert (z >= y);
-    }
+    assert ((size > 0) ==> z >= y);
 }

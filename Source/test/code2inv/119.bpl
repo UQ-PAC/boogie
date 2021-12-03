@@ -12,7 +12,5 @@ procedure main() {
     sn  :=  (sn + 1);
   }
   // post-condition
-if ( (sn != 0) ) {
-  assert( (sn == size) );
-}
+  assert((sn != 0) ==> (sn == size) );
 }

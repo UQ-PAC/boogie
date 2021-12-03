@@ -16,7 +16,5 @@ procedure main() {
         k := k + 1;
     }
 
-    if( c > 0 ) {
-        assert( a <=  m);
-    }
+        assert(( c > 0 ) ==> a <=  m);
 }

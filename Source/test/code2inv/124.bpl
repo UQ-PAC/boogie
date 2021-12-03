@@ -13,7 +13,6 @@ procedure main() {
     y  :=  (y - 1);
   }
   // post-condition
-if ( (i == j) ) {
-  assert( (y == 0) );
-}
+
+  assert((i == j) ==> (y == 0) );
 }

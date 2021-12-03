@@ -133,6 +133,13 @@ namespace Microsoft.Boogie.InvariantInference {
           } else if (op == VCExpressionGenerator.ImpliesOp) {
             return Expr.Imp(arg0, arg1);
           }
+        } else if (nary.Arity == 3) {
+          Expr arg0 = VCtoExpr(nary[0], scopeVars);
+          Expr arg1 = VCtoExpr(nary[1], scopeVars);
+          Expr arg2 = VCtoExpr(nary[2], scopeVars);
+          if (op == VCExpressionGenerator.IfThenElseOp) {
+            return new NAryExpr(Token.NoToken, new IfThenElse(Token.NoToken), new List<Expr> { arg0, arg1, arg2 });
+          }
         }
       } else if (vc is VCExprVar) {
         VCExprVar vcVar = vc as VCExprVar;
@@ -205,16 +212,15 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr I = StoVC(resp, gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
           VCExpr notI = gen.NotSimp(I);
           if (isInductive(notI, loopHead, loopBody, K, prover)) {
-            /*
+            
             if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
-              throw new Exception("generated invariant doesn't satisfy I & !K ==> Q");
+              throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
-              throw new Exception("generated invariant doesn't satisfy P ==> I");
+              throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
-            */
             if (satisfiable(gen.NotSimp(gen.AndSimp(notI, gen.NotSimp(K))), prover)) {
-              throw new Exception("invariant is guard or weaker version of it");
+              throw new Exception("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
             return notI; // found invariant
@@ -260,6 +266,7 @@ namespace Microsoft.Boogie.InvariantInference {
       foreach (SExpr arg in sexpr.Arguments) {
         args.Add(StoVC(arg, gen, translator, scopeVars, boundVars));
       }
+      VCExpr combinedArgs;
       switch (sexpr.Name) {
         case "":
           if (args.Count == 1) {
@@ -267,18 +274,35 @@ namespace Microsoft.Boogie.InvariantInference {
           }
           break;
         case "and":
-          return gen.AndSimp(args[0], args[1]);
+          combinedArgs = gen.AndSimp(args[0], args[1]);
+          for (int i = 2; i < args.Count; i++) {
+            combinedArgs = gen.AndSimp(combinedArgs, args[i]);
+          }
+          return combinedArgs;
         case "or":
-          return gen.OrSimp(args[0], args[1]);
+          combinedArgs = gen.OrSimp(args[0], args[1]);
+          for (int i = 2; i < args.Count; i++) {
+            combinedArgs = gen.OrSimp(combinedArgs, args[i]);
+          }
+          return combinedArgs;
+          break;
         case "not":
           return gen.NotSimp(args[0]);
         case "=>":
           return gen.ImpliesSimp(args[0], args[1]); 
         case "+":
           if (args[0].Type.IsInt) {
-            return gen.Function(VCExpressionGenerator.AddIOp, args);
+            combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { args[0], args [1]});
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
           } else if (args[0].Type.IsReal) {
-            return gen.Function(VCExpressionGenerator.AddROp, args);
+            combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { args[0], args[1] });
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
           }
           break;
         case "-":
@@ -306,9 +330,17 @@ namespace Microsoft.Boogie.InvariantInference {
           break;
         case "*":
           if (args[0].Type.IsInt) {
-            return gen.Function(VCExpressionGenerator.MulIOp, args);
+            combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { args[0], args[1] });
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
           } else if (args[0].Type.IsReal) {
-            return gen.Function(VCExpressionGenerator.MulROp, args);
+            combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { args[0], args[1] });
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
           }
           break;
         case "div":

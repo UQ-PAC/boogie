@@ -7,7 +7,6 @@ procedure main() {
     var t:int;
     var u:bool;
     i := 0;
-    call u := unknown();
     while(u) {
         if(c > 48) {
             if (c < 57) {
@@ -16,7 +15,7 @@ procedure main() {
                 i := j + t;
             }
         }
-        call u := unknown();
+        havoc u;
     } 
     assert (i >= 0);
 }

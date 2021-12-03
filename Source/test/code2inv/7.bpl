@@ -11,14 +11,11 @@ procedure main() {
   assume((y <= 10));
   assume((y >= 0));
   // loop body
-  call u := unknown();
   while (u) {
     x  :=  (x + 10);
     y  :=  (y + 10);
-    call u := unknown();
+    havoc u;
   }
   // post-condition
-  if (x == 20) {
-    assert( y != 0 );
-  }
+    assert((x == 20) ==> y != 0 );
 }

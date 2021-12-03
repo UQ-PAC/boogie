@@ -15,13 +15,12 @@ procedure main() {
   assume((y >= 0));
   assume((x >= y));
   // loop body
-  call u := unknown();
   while (u) {
     if ( (i < y) )
     {
     i  :=  (i + 1);
     }
-    call u := unknown();
+    havoc u;
   }
   // post-condition
 if ( (i >= x) ) {

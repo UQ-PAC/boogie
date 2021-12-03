@@ -11,7 +11,5 @@ procedure main() {
     sn  :=  (sn + 1);
   }
   // post-condition
-if ( (sn != 8) ) {
-  assert( (sn == 0) );
-}
+  assert((sn != 8) ==> (sn == 0) );
 }

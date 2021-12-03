@@ -8,19 +8,16 @@ procedure main() {
     c := 0;
     assume (n > 0);
 
-    call u := unknown();
-  while (u) {
+    while (u) {
         if(c == n) {
             c := 1;
         }
         else {
             c := c + 1;
         }
-        call u := unknown();
+        havoc u;
     }
 
-    if(c == n) {
         //assert( c >= 0);
-        assert( c <= n);
-    }
+        assert((c == n) ==> c <= n);
 }
