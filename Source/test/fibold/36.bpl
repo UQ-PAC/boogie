@@ -1,5 +1,3 @@
-procedure unknown() returns (u: bool);
-
 procedure fib36()
 {
   var u: bool;
@@ -30,10 +28,9 @@ procedure fib36()
 	assume(w == 0);
 	assume(turn == 0);
 
-  call u := unknown();
 	while(u){
 		if(turn == 0){
-      call u := unknown();
+      havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -82,7 +79,7 @@ procedure fib36()
 						x := x - 1;
 						y := y - 1;
 					}
-          call u := unknown();
+          havoc u;
 					if(u){
 						turn := 4;
 					}
@@ -121,7 +118,7 @@ procedure fib36()
 					a := a + c;
 					b := b + d;
 				}
-        call u := unknown();
+        havoc u;
 				if(u){
 					turn := 7;				
 				}
@@ -130,7 +127,7 @@ procedure fib36()
 				}
 			}
 		}
-    call u := unknown();
+    havoc u;
 	}
 
 	assert(w >= z && a == b);	

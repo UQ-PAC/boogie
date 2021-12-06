@@ -11,8 +11,6 @@ procedure fib12()
   var turn: int;
 
   var u: bool;
-  var u1: bool;
-  var u2: bool;
 
   assume(t == 0);
   assume(s == 0);
@@ -23,7 +21,7 @@ procedure fib12()
 
   while(turn != 4){
     if(turn == 0){
-      call u := unknown();
+      havoc u;
       if(u){
         turn := 1;
       }
@@ -40,7 +38,7 @@ procedure fib12()
       if(flag > 0){
         t := t + a;
       }
-      call u := unknown();
+      havoc u;
       if(u){
         turn := 1;
       }
@@ -62,7 +60,7 @@ procedure fib12()
 
     if(turn == 3){
       if(y <= x){
-        call u := unknown();
+        havoc u;
         if(u){
           y := y + 1;
         }
@@ -78,5 +76,3 @@ procedure fib12()
 
   assert(y <= 4);	
 }
-
-procedure unknown() returns (u: bool);

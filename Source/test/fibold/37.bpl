@@ -12,7 +12,7 @@ procedure fib37()
 	assume(n > 0);
 
 	while(x < n){
-    call u := unknown();
+    havoc u;
 		if(u){
 			m := x;		
 		}

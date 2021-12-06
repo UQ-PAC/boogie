@@ -176,13 +176,13 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpressionGenerator gen = prover.Context.ExprGen;
 
       Block start = impl.Blocks[0];
-      Block end = getEndBlock(impl);
+      List<Block> ends = getEndBlocks(impl);
 
       VCExpr requires = convertRequires(impl, gen, translator);
       VCExpr ensures = convertEnsures(impl, gen, translator);
 
       VCExpr loopP = getLoopPreCondition(requires, start, loopHead, gen, translator);
-      VCExpr loopQ = getLoopPostCondition(ensures, end, loopHead, gen, translator);
+      VCExpr loopQ = getLoopPostCondition(ensures, ends, loopHead, gen, translator);
 
       // probably can improve this
       List<List<Block>> loopPaths = new List<List<Block>>();
@@ -202,24 +202,61 @@ namespace Microsoft.Boogie.InvariantInference {
       int r = 0;
       int concrete = 0;
       int iterations = 0;
+      bool ATooBig = false;
+      bool doConcrete = false;
+      /*
+      string OldInterpolant = "";
+      string OldOldInterpolant = "";
+      string interpolantStr = ""; */
       while (true) {
         iterations++;
+        int Asize = SizeComputingVisitor.ComputeSize(A[t]);
+        /*
+        if (!ATooBig) {
+          if (Asize > 10000) {
+            ATooBig = true;
+          }
+        } */
+
         VCExpr ADisjunct = listDisjunction(A, gen);
         String B_rElim = prover.EliminateQuantifiers(B[r]);
+        int Bsize = SizeComputingVisitor.ComputeSize(B[r]);
         String ADisjunctElim = prover.EliminateQuantifiers(ADisjunct);
-        if (!interpol.Satisfiable(B[r], ADisjunct, B_rElim, ADisjunctElim)) {
+        int ADsize = SizeComputingVisitor.ComputeSize(ADisjunct);
+        Console.WriteLine("iteration " + iterations + " has A_disjunct size " + ADsize + ", A size " + Asize + " and B size " + Bsize);
+        Console.Out.Flush();
+        if (!doConcrete && !interpol.Satisfiable(B[r], ADisjunct, B_rElim, ADisjunctElim)) {
           SExpr resp = interpol.CalculateInterpolant();
+          /*
+          OldOldInterpolant = OldInterpolant;
+          OldInterpolant = interpolantStr;
+          interpolantStr = resp.ToString();
+          Console.WriteLine("interpolant: " + interpolantStr);
+          if (interpolantStr == OldInterpolant && interpolantStr == OldOldInterpolant) {
+            doConcrete = true;
+            continue;
+          } */
           VCExpr I = StoVC(resp, gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
           VCExpr notI = gen.NotSimp(I);
+          int size = SizeComputingVisitor.ComputeSize(notI);
+          //Console.WriteLine("interpolant: " + notI.ToString());
+          Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
+          Console.Out.Flush();
           if (isInductive(notI, loopHead, loopBody, K, prover)) {
             
             if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
+              Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
               throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
+              Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
               throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             if (satisfiable(gen.NotSimp(gen.AndSimp(notI, gen.NotSimp(K))), prover)) {
+              Console.WriteLine("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
               throw new Exception("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
@@ -227,11 +264,14 @@ namespace Microsoft.Boogie.InvariantInference {
           }
           B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody, gen, translator)))); 
           r++;
-          A.Insert(t + 1, setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody, gen, translator));
-          t++; 
+          //if (!ATooBig) {
+            A.Insert(t + 1, setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody, gen, translator));
+            t++;
+          //}
         } else {
+          doConcrete = false;
           if (r <= concrete) {
-            Console.WriteLine("failed after " + iterations + "iterations");
+            Console.WriteLine("failed after " + iterations + " iterations");
             return VCExpressionGenerator.True; // fail to find invariant
           } else {
             r = concrete;
@@ -473,17 +513,14 @@ namespace Microsoft.Boogie.InvariantInference {
       return ensures;
     }
 
-    private static Block getEndBlock(Implementation impl) {
-      Block end = null;
+    private static List<Block> getEndBlocks(Implementation impl) {
+      List<Block> ends = new List<Block>();
       foreach (Block b in impl.Blocks) {
         if (b.TransferCmd is ReturnCmd) {
-          if (end != null) {
-            throw new NotImplementedException("cannot handle loops with multiple exits");
-          }
-          end = b;
+          ends.Add(b);
         }
       }
-      return end;
+      return ends;
     }
     
     // need to completely rework paths approach
@@ -579,20 +616,25 @@ namespace Microsoft.Boogie.InvariantInference {
       }
     }
 
+
     private static VCExpr setWP(Block initial, Block target, VCExpr Q_In, HashSet<Block> blocks, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
+      return setWP(new List<Block> { initial }, target, Q_In, blocks, gen, translator);
+    }
+    private static VCExpr setWP(List<Block> initials, Block target, VCExpr Q_In, HashSet<Block> blocks, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
       Debug.Assert(blocks.Count > 0);
 
       Dictionary<Block, VCExpr> blockWPs = new Dictionary<Block, VCExpr>();
       Queue<Block> toTry = new Queue<Block>();
-      blockWPs.Add(initial, blockWP(initial, Q_In, gen, translator));
-      foreach (Block predecessor in initial.Predecessors) {
-        if (blocks.Contains(predecessor)) {
-          toTry.Enqueue(predecessor);
+      foreach (Block initial in initials) {
+        blockWPs.Add(initial, blockWP(initial, Q_In, gen, translator));
+        foreach (Block predecessor in initial.Predecessors) {
+          if (blocks.Contains(predecessor)) {
+            toTry.Enqueue(predecessor);
+          }
         }
-      }
-
-      if (blocks.Count == 1) {
-        return blockWPs[initial];
+        if (blocks.Count == 1) {
+          return blockWPs[initial];
+        }
       }
 
       while (toTry.Count != 0) {
@@ -703,19 +745,22 @@ namespace Microsoft.Boogie.InvariantInference {
       return P;
     }
 
-    private static VCExpr getLoopPostCondition(VCExpr ensures, Block end, Block loopHead, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
-      List<List<Block>> paths = new List<List<Block>>();
-      paths.Add(new List<Block> { end });
-      DoBackwardsDFSVisit(end, loopHead, paths);
+    private static VCExpr getLoopPostCondition(VCExpr ensures, List<Block> ends, Block loopHead, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {
       HashSet<Block> blocks = new HashSet<Block>();
-      foreach (List<Block> l in paths) {
-        foreach (Block b in l) {
-          blocks.Add(b);
+      foreach (Block end in ends) {
+        List<List<Block>> paths = new List<List<Block>>();
+        paths.Add(new List<Block> { end });
+        DoBackwardsDFSVisit(end, loopHead, paths);
+
+        foreach (List<Block> l in paths) {
+          foreach (Block b in l) {
+            blocks.Add(b);
+          }
         }
       }
       blocks.Add(loopHead);
 
-      return setWP(end, loopHead, ensures, blocks, gen, translator);
+      return setWP(ends, loopHead, ensures, blocks, gen, translator);
     }
 
     private static VCExpr getLoopPreCondition(VCExpr requires, Block start, Block loopHead, VCExpressionGenerator gen, Boogie2VCExprTranslator translator) {

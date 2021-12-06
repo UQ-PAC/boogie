@@ -1,1 +1,3 @@
 log.txt
+test/fib/log/*
+test/code2inv/log/*

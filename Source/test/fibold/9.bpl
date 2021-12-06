@@ -15,6 +15,7 @@ procedure fib9()
   while(u) {
     if (turn == 0) {
       i := i + 1;
+      havoc u;
       if (u) {
         turn := 0;
       } else {
@@ -33,12 +34,14 @@ procedure fib9()
       t := i;
       i := i + 1;
       k := k + 1;
+      havoc u;
       if (u) {
         turn := 2;
       } else {
         turn := 3;
       }
     } else if (turn == 3) {
+      havoc u;
       if (u) {
         turn := 3;
       } else {

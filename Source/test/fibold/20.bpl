@@ -1,5 +1,3 @@
-procedure unknown() returns (u: bool);
-
 procedure fib20()
 {
 	var u: bool;
@@ -25,7 +23,7 @@ procedure fib20()
 			y := y + 1;
 		}
 
-    call u := unknown();
+    havoc u;
 		if(u){
 			m := j;
 		}

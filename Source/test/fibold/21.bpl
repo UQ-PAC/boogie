@@ -20,7 +20,7 @@ procedure fib21()
   while(i < n){
     i := i + 1;
     
-    call u := unknown();
+    havoc u;
     if(u){
       v := 0;		
     }

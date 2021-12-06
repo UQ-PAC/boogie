@@ -1,5 +1,3 @@
-procedure unknown() returns (u: bool);
-
 procedure main() {
   // variable declarations
   var c:int;
@@ -28,7 +26,5 @@ procedure main() {
       havoc u;
   }
   // post-condition
-if ( (c == n) ) {
-  assert( (n <= -1) );
-}
+  assert((c == n) ==> (n <= -1) );
 }

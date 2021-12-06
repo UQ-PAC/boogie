@@ -16,10 +16,9 @@ procedure fib25()
 	assume(j == 0);
 	assume(turn == 0);
 
-  call u := unknown();
 	while(u){
 		if(turn == 0){
-      call u := unknown();
+      havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -37,7 +36,7 @@ procedure fib25()
 				j := j + 1;
 			}
 
-      call u := unknown();
+      havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -58,7 +57,7 @@ procedure fib25()
 				turn := 0;
 			}
 		}
-    call u := unknown();
+    havoc u;
 	}
 
 	assert(i >= j);	

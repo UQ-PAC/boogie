@@ -16,10 +16,9 @@ procedure fib26()
 	assume(y == 0);
 	assume(turn == 0);
 
-  //call u := unknown();
 	while(u){
 		if(turn == 0){
-      //call u := unknown();
+      havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -37,7 +36,7 @@ procedure fib26()
 				y := y + 1;
 			}
 
-			//call u := unknown();
+			havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -49,7 +48,7 @@ procedure fib26()
 		if(turn == 2){
 			z := x + y;
 			w := z + 1;
-      //call u := unknown();
+      havoc u;
 			if(u){
 				turn := 2;
 			}

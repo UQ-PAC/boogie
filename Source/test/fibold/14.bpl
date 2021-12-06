@@ -1,5 +1,3 @@
-procedure unknown() returns (u: bool);
-
 procedure fib14()
 {
   var u: bool;
@@ -12,7 +10,7 @@ procedure fib14()
   assume(j == 1);
 
   while(j <= m){
-    //call u := unknown();
+    havoc u;
     if(u){
       a := a + 1;
     }

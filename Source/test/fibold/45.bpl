@@ -26,7 +26,7 @@ procedure fib45()
 
 	while(turn != 6){
 		if(turn == 0){
-      call u := unknown();
+      havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -45,7 +45,7 @@ procedure fib45()
 				j := j + 1;
 			}
 
-      call u := unknown();
+      havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -81,7 +81,7 @@ procedure fib45()
 				if(z mod 2 == 0){
 					y := y + 1;
 				}
-				call u := unknown();
+				havoc u;
 				if(u){
 					turn := 4;
 				}
@@ -93,7 +93,7 @@ procedure fib45()
 				if(turn == 5){
 					z := x + y;
 					w := z + 1;
-          call u := unknown();
+          havoc u;
 					if(u){
 						turn := 3;
 					}

@@ -1,5 +1,3 @@
-procedure unknown() returns (u: bool);
-
 procedure fib29()
 {
   var u: bool;
@@ -19,7 +17,6 @@ procedure fib29()
 	assume(y == 3);
 	assume(turn == 0);
 
-  //call u := unknown();
 	while(u){
 		if(turn == 0){
 			x := a + c;
@@ -39,6 +36,7 @@ procedure fib29()
 			if(turn == 1){
 				c := c - 1;
 				b := b - 1;
+        havoc u;
 				if(u){
 					turn := 1;
 				}

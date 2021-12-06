@@ -4,14 +4,13 @@ procedure fib8()
   assume(x == 0);
   assume(y == 0);
 
-  call u := unknown();
   while(u) {
-    call u := unknown();
+    havoc u;
     if (u) {
       x := x + 1;
       y := y + 1;
     } else {
-      call u := unknown();
+      havoc u;
       if (u) {
         if (x >= 4) {
           x := x + 1;
@@ -22,9 +21,7 @@ procedure fib8()
         }
       }
     }
-    call u := unknown();	
+    havoc u;
   }
   assert(x < 4 || y > 2);
 }
-
-procedure unknown() returns (u: bool);

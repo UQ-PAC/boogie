@@ -19,7 +19,7 @@ procedure fib40()
 
 	while(turn != 4){
 		if(turn == 0){
-      call u := unknown();
+      havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -37,7 +37,7 @@ procedure fib40()
 			else{
 				j := j + 1;
 			}
-			call u := unknown();
+			havoc u;
 			if(u){
 				turn := 1;
 			}
@@ -56,7 +56,7 @@ procedure fib40()
 				if(turn == 3){
 					a := a + 1;
 					b := b + j - i;
-          call u := unknown();
+          havoc u;
 					if(u){
 						turn := 3;
 					}

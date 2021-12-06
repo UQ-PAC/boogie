@@ -7,7 +7,7 @@ procedure fib7()
   b := 0;
   
   while (i < n) {
-    //call u := unknown();
+    havoc u;
 	  if (u) {
 	    a := a + 1;
 	    b := b + 2;
