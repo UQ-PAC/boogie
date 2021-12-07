@@ -1,17 +1,18 @@
 $files = Get-ChildItem "test\fibold"
 $timeoutseconds = 60
+$root = Get-Location
 foreach ($f in $files) {
   $code = {
-    param($f)
-    cd D:\Work\boogie\Source
+    param($f, $root)
+    cd $root
     $outfile = "test\fibold\log\" + ($f.Name -replace "\..+") + ".txt"
     if (!(Test-Path $outfile)) {
       $mathsatlog = "test\fibold\log\" + ($f.Name -replace "\..+") + "interpol.txt"
     $z3log = "test\fibold\log\" + ($f.Name -replace "\..+") + "z3.txt"
-    .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /checkInfer /timeLimit:10 /inferinterpolant:mathsat /printInstrumented $f.FullName > $outfile 
+    .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /checkInfer /inferinterpolant:mathsat /printInstrumented $f.FullName > $outfile 
     }  
   }
-  $j = Start-Job -ScriptBlock $code -ArgumentList $f
+  $j = Start-Job -ScriptBlock $code -ArgumentList $f, $root
   if (Wait-Job $j -Timeout $timeoutSeconds) { Receive-Job $j }
   Remove-Job -force $j
   Write-Host $f.Name

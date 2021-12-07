@@ -523,7 +523,7 @@ namespace Microsoft.Boogie
 
     public abstract Outcome CheckOutcomeBasic();
 
-    public abstract string EliminateQuantifiers(VCExpr predicate);
+    public abstract VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars);
 
     public virtual string[] CalculatePath(int controlFlowConstant)
     {
@@ -698,11 +698,6 @@ namespace Microsoft.Boogie
       throw new NotImplementedException();
     }
 
-    public override string EliminateQuantifiers(VCExpr predicate) {
-      Contract.EnsuresOnThrow<UnexpectedProverOutputException>(true);
-      throw new NotImplementedException();
-    }
-
     [NoDefaultContract]
     public override Outcome CheckOutcome(ErrorHandler handler, int taskID = -1)
     {
@@ -718,6 +713,11 @@ namespace Microsoft.Boogie
 
     public override void FullReset(VCExpressionGenerator gen)
     {
+      throw new NotImplementedException();
+    }
+
+    public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars) {
+      Contract.EnsuresOnThrow<UnexpectedProverOutputException>(true);
       throw new NotImplementedException();
     }
   }

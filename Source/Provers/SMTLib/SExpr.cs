@@ -3,6 +3,8 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Text;
 using System.Diagnostics.Contracts;
+using Microsoft.Boogie.VCExprAST;
+using Microsoft.BaseTypes;
 
 namespace Microsoft.Boogie
 {
@@ -321,5 +323,162 @@ namespace Microsoft.Boogie
       }
       return new SExpr(sexpr.Name, newArgs);
     }
+
+    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, Dictionary<String, VCExprVar> boundVars) {
+      // still need to add floats
+      if (Name == "let") {
+        List<VCExprLetBinding> bindings = new List<VCExprLetBinding>();
+        Dictionary<String, VCExprVar> boundVarsUpdate = new Dictionary<String, VCExprVar>(boundVars);
+        foreach (SExpr def in Arguments[0].Arguments) {
+          VCExpr e = def.Arguments[0].ToVC(gen, translator, scopeVars, boundVars);
+          VCExprVar bound = gen.Variable(def.Name, e.Type);
+          boundVarsUpdate.Add(def.Name, bound);
+          bindings.Add(gen.LetBinding(bound, e));
+        }
+
+        VCExpr body = Arguments[1].ToVC(gen, translator, scopeVars, boundVarsUpdate);
+
+        return gen.Let(bindings, body);
+      }
+
+      List<VCExpr> args = new List<VCExpr>();
+      foreach (SExpr arg in Arguments) {
+        args.Add(arg.ToVC(gen, translator, scopeVars, boundVars));
+      }
+      VCExpr combinedArgs;
+      switch (Name) {
+        case "":
+          if (args.Count == 1) {
+            return args[0];
+          }
+          break;
+        case "and":
+          combinedArgs = gen.AndSimp(args[0], args[1]);
+          for (int i = 2; i < args.Count; i++) {
+            combinedArgs = gen.AndSimp(combinedArgs, args[i]);
+          }
+          return combinedArgs;
+        case "or":
+          combinedArgs = gen.OrSimp(args[0], args[1]);
+          for (int i = 2; i < args.Count; i++) {
+            combinedArgs = gen.OrSimp(combinedArgs, args[i]);
+          }
+          return combinedArgs;
+          break;
+        case "not":
+          return gen.NotSimp(args[0]);
+        case "=>":
+          return gen.ImpliesSimp(args[0], args[1]);
+        case "+":
+          if (args[0].Type.IsInt) {
+            combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { args[0], args[1] });
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
+          } else if (args[0].Type.IsReal) {
+            combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { args[0], args[1] });
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
+          }
+          break;
+        case "-":
+          if (ArgCount == 1) {
+            if (args[0] is VCExprIntLit) {
+              BigNum val = ((VCExprIntLit)args[0]).Val;
+              return gen.Integer(-val);
+            } else if (args[0] is VCExprRealLit) {
+              BigDec val = ((VCExprRealLit)args[0]).Val;
+              return gen.Real(-val);
+            } else {
+              if (args[0].Type.IsInt) {
+                return gen.Function(VCExpressionGenerator.SubIOp, gen.Integer(BigNum.ZERO), args[0]);
+              } else if (args[0].Type.IsReal) {
+                return gen.Function(VCExpressionGenerator.SubROp, gen.Real(BigDec.ZERO), args[0]);
+              }
+            }
+          } else if (ArgCount == 2) {
+            if (args[0].Type.IsInt) {
+              return gen.Function(VCExpressionGenerator.SubIOp, args);
+            } else if (args[0].Type.IsReal) {
+              return gen.Function(VCExpressionGenerator.SubROp, args);
+            }
+          }
+          break;
+        case "*":
+          if (args[0].Type.IsInt) {
+            combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { args[0], args[1] });
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
+          } else if (args[0].Type.IsReal) {
+            combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { args[0], args[1] });
+            for (int i = 2; i < args.Count; i++) {
+              combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { combinedArgs, args[i] });
+            }
+            return combinedArgs;
+          }
+          break;
+        case "div":
+          return gen.Function(VCExpressionGenerator.DivIOp, args);
+        case "/":
+          return gen.Function(VCExpressionGenerator.DivROp, args);
+        case "mod":
+          return gen.Function(VCExpressionGenerator.ModOp, args);
+        case "=":
+          return gen.Function(VCExpressionGenerator.EqOp, args);
+        case ">":
+          return gen.Function(VCExpressionGenerator.GtOp, args);
+        case "<":
+          return gen.Function(VCExpressionGenerator.LtOp, args);
+        case "<=":
+          return gen.Function(VCExpressionGenerator.LeOp, args);
+        case ">=":
+          return gen.Function(VCExpressionGenerator.GeOp, args);
+        case "ite":
+          return gen.Function(VCExpressionGenerator.IfThenElseOp, args);
+        case "true":
+          return VCExpressionGenerator.True;
+        case "false":
+          return VCExpressionGenerator.False;
+        case "to_int":
+          return gen.Function(VCExpressionGenerator.ToIntOp, args);
+        case "to_real":
+          return gen.Function(VCExpressionGenerator.ToRealOp, args);
+        default:
+          BigNum num;
+          BigDec dec;
+          if (Name.All(Char.IsDigit)) {
+            if (BigNum.TryParse(Name, out num)) {
+              // int
+              return gen.Integer(num);
+            }
+          }
+          if (Name.All(c => Char.IsDigit(c) || c == '.' || c == 'e')) {
+            if (BigDec.TryParse(Name, out dec)) {
+              // real
+              return gen.Real(dec);
+            }
+          }
+          // identifier
+          foreach (Variable v in scopeVars) {
+            if (v.Name.Equals(Name)) {
+              return translator.LookupVariable(v);
+            }
+          }
+          foreach (KeyValuePair<String, VCExprVar> kv in boundVars) {
+            if (kv.Key.Equals(Name)) {
+              return kv.Value;
+            }
+          }
+          // can figure out floats later
+          break;
+      }
+      throw new NotImplementedException("unimplemented for conversion to VCExpr: " + this);
+    }
   }
+
 }

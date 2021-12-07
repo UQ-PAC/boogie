@@ -184,6 +184,9 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpr loopP = getLoopPreCondition(requires, start, loopHead, gen, translator);
       VCExpr loopQ = getLoopPostCondition(ensures, ends, loopHead, gen, translator);
 
+      VCExpr loopPElim = prover.EliminateQuantifiers(loopP, scopeVars);
+      VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars);
+
       // probably can improve this
       List<List<Block>> loopPaths = new List<List<Block>>();
       DoDFSVisitLoop(loopHead, loopHead, loopPaths);
@@ -196,7 +199,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
       // backward squeezing algorithm
       VCExpr K = getLoopGuard(loopHead, loopBody, gen, translator); // guard 
-      List<VCExpr> A = new List<VCExpr> { loopP }; //A_0 = P
+      List<VCExpr> A = new List<VCExpr> { loopPElim }; //A_0 = P
       List<VCExpr> B = new List<VCExpr> { gen.AndSimp(gen.NotSimp(K), gen.NotSimp(loopQ)) }; //B_0 = !K && !Q
       int t = 0;
       int r = 0;
@@ -219,13 +222,12 @@ namespace Microsoft.Boogie.InvariantInference {
         } */
 
         VCExpr ADisjunct = listDisjunction(A, gen);
-        String B_rElim = prover.EliminateQuantifiers(B[r]);
+        VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars);
         int Bsize = SizeComputingVisitor.ComputeSize(B[r]);
-        String ADisjunctElim = prover.EliminateQuantifiers(ADisjunct);
         int ADsize = SizeComputingVisitor.ComputeSize(ADisjunct);
         Console.WriteLine("iteration " + iterations + " has A_disjunct size " + ADsize + ", A size " + Asize + " and B size " + Bsize);
         Console.Out.Flush();
-        if (!doConcrete && !interpol.Satisfiable(B[r], ADisjunct, B_rElim, ADisjunctElim)) {
+        if (!doConcrete && !interpol.Satisfiable(B_rElim, ADisjunct)) {
           SExpr resp = interpol.CalculateInterpolant();
           /*
           OldOldInterpolant = OldInterpolant;
@@ -236,10 +238,10 @@ namespace Microsoft.Boogie.InvariantInference {
             doConcrete = true;
             continue;
           } */
-          VCExpr I = StoVC(resp, gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
+          VCExpr I = resp.ToVC(gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
           VCExpr notI = gen.NotSimp(I);
           int size = SizeComputingVisitor.ComputeSize(notI);
-          //Console.WriteLine("interpolant: " + notI.ToString());
+          //Console.WriteLine("invar candidate: " + notI.ToString());
           Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
           Console.Out.Flush();
           if (isInductive(notI, loopHead, loopBody, K, prover)) {
@@ -265,8 +267,11 @@ namespace Microsoft.Boogie.InvariantInference {
           B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody, gen, translator)))); 
           r++;
           //if (!ATooBig) {
-            A.Insert(t + 1, setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody, gen, translator));
-            t++;
+          VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody, gen, translator);
+          VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars);
+          //Console.WriteLine("A: " + AElim);
+          A.Insert(t + 1, AElim);
+          t++;
           //}
         } else {
           doConcrete = false;
@@ -283,162 +288,6 @@ namespace Microsoft.Boogie.InvariantInference {
       }
       Console.WriteLine("gave up on finding invariant after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
       return VCExpressionGenerator.True;
-    }
-
-    private static VCExpr StoVC(SExpr sexpr, VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, Dictionary<String, VCExprVar> boundVars) {
-      // still need to add floats
-      if (sexpr.Name == "let") {
-        List<VCExprLetBinding> bindings = new List<VCExprLetBinding>();
-        Dictionary<String, VCExprVar> boundVarsUpdate = new Dictionary<String, VCExprVar>(boundVars);
-        foreach (SExpr def in sexpr.Arguments[0].Arguments) {
-          VCExpr e = StoVC(def.Arguments[0], gen, translator, scopeVars, boundVars);
-          VCExprVar bound = gen.Variable(def.Name, e.Type);
-          boundVarsUpdate.Add(def.Name, bound);
-          bindings.Add(gen.LetBinding(bound, e));
-        }
-
-        VCExpr body = StoVC(sexpr.Arguments[1], gen, translator, scopeVars, boundVarsUpdate);
-
-        return gen.Let(bindings, body);
-      }
-
-      List<VCExpr> args = new List<VCExpr>();
-      foreach (SExpr arg in sexpr.Arguments) {
-        args.Add(StoVC(arg, gen, translator, scopeVars, boundVars));
-      }
-      VCExpr combinedArgs;
-      switch (sexpr.Name) {
-        case "":
-          if (args.Count == 1) {
-            return args[0];
-          }
-          break;
-        case "and":
-          combinedArgs = gen.AndSimp(args[0], args[1]);
-          for (int i = 2; i < args.Count; i++) {
-            combinedArgs = gen.AndSimp(combinedArgs, args[i]);
-          }
-          return combinedArgs;
-        case "or":
-          combinedArgs = gen.OrSimp(args[0], args[1]);
-          for (int i = 2; i < args.Count; i++) {
-            combinedArgs = gen.OrSimp(combinedArgs, args[i]);
-          }
-          return combinedArgs;
-          break;
-        case "not":
-          return gen.NotSimp(args[0]);
-        case "=>":
-          return gen.ImpliesSimp(args[0], args[1]); 
-        case "+":
-          if (args[0].Type.IsInt) {
-            combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { args[0], args [1]});
-            for (int i = 2; i < args.Count; i++) {
-              combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { combinedArgs, args[i] });
-            }
-            return combinedArgs;
-          } else if (args[0].Type.IsReal) {
-            combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { args[0], args[1] });
-            for (int i = 2; i < args.Count; i++) {
-              combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { combinedArgs, args[i] });
-            }
-            return combinedArgs;
-          }
-          break;
-        case "-":
-          if (sexpr.ArgCount == 1) {
-            if (args[0] is VCExprIntLit) {
-              BigNum val = ((VCExprIntLit)args[0]).Val;
-              return gen.Integer(-val);
-            } else if (args[0] is VCExprRealLit) {
-              BigDec val = ((VCExprRealLit)args[0]).Val;
-              return gen.Real(-val);
-            } else {
-              if (args[0].Type.IsInt) {
-                return gen.Function(VCExpressionGenerator.SubIOp, gen.Integer(BigNum.ZERO), args[0]);
-              } else if (args[0].Type.IsReal) {
-                return gen.Function(VCExpressionGenerator.SubROp, gen.Real(BigDec.ZERO), args[0]);
-              }
-            }
-          } else if (sexpr.ArgCount == 2) {
-            if (args[0].Type.IsInt) {
-              return gen.Function(VCExpressionGenerator.SubIOp, args);
-            } else if (args[0].Type.IsReal) {
-              return gen.Function(VCExpressionGenerator.SubROp, args);
-            }
-          }
-          break;
-        case "*":
-          if (args[0].Type.IsInt) {
-            combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { args[0], args[1] });
-            for (int i = 2; i < args.Count; i++) {
-              combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { combinedArgs, args[i] });
-            }
-            return combinedArgs;
-          } else if (args[0].Type.IsReal) {
-            combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { args[0], args[1] });
-            for (int i = 2; i < args.Count; i++) {
-              combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { combinedArgs, args[i] });
-            }
-            return combinedArgs;
-          }
-          break;
-        case "div":
-          return gen.Function(VCExpressionGenerator.DivIOp, args);
-        case "/":
-          return gen.Function(VCExpressionGenerator.DivROp, args);
-        case "mod":
-          return gen.Function(VCExpressionGenerator.ModOp, args);
-        case "=":
-          return gen.Function(VCExpressionGenerator.EqOp, args);
-        case ">":
-          return gen.Function(VCExpressionGenerator.GtOp, args);
-        case "<":
-          return gen.Function(VCExpressionGenerator.LtOp, args);
-        case "<=":
-          return gen.Function(VCExpressionGenerator.LeOp, args);
-        case ">=":
-          return gen.Function(VCExpressionGenerator.GeOp, args);
-        case "ite":
-          return gen.Function(VCExpressionGenerator.IfThenElseOp, args);
-        case "true":
-          return VCExpressionGenerator.True;
-        case "false":
-          return VCExpressionGenerator.False;
-        case "to_int":
-          return gen.Function(VCExpressionGenerator.ToIntOp, args);
-        case "to_real":
-          return gen.Function(VCExpressionGenerator.ToRealOp, args);
-        default:
-          BigNum num;
-          BigDec dec;
-          if (sexpr.Name.All(Char.IsDigit)) {
-            if (BigNum.TryParse(sexpr.Name, out num)) {
-              // int
-              return gen.Integer(num);
-            }
-          } 
-          if (sexpr.Name.All(c => Char.IsDigit(c) || c == '.' || c == 'e')) {
-            if (BigDec.TryParse(sexpr.Name, out dec)) {
-              // real
-              return gen.Real(dec);
-            }
-          } 
-          // identifier
-          foreach (Variable v in scopeVars) {
-            if (v.Name.Equals(sexpr.Name)) {
-              return translator.LookupVariable(v);
-            }
-          }
-          foreach (KeyValuePair<String, VCExprVar> kv in boundVars) {
-            if (kv.Key.Equals(sexpr.Name)) {
-              return kv.Value;
-            }
-          }
-          // can figure out floats later
-          break;
-      }
-      throw new NotImplementedException("unimplemented for conversion to VCExpr: " + sexpr);
     }
 
     // naive implementation, will surely need to make more sophisticated, just expects loop guard to be in assume statement at start of second block of any loop path
@@ -868,8 +717,8 @@ namespace Microsoft.Boogie.InvariantInference {
         SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
         VCExpr substP = substituter.Mutate(P, subst);
 
-        return substP;
-        //return gen.Exists(freshVars, new List<VCTrigger>(), substP);
+        //return substP;
+        return gen.Exists(freshVars, new List<VCTrigger>(), substP);
 
       } else if (cmd is AssignCmd) {
         // x := e -> exists x' :: P[x\x'] && x == e[x\x']
@@ -907,11 +756,11 @@ namespace Microsoft.Boogie.InvariantInference {
           substP = gen.AndSimp(substP, gen.Eq(assign.Item1, substRhs));
         }
         VCExpr sp = substP;
-        /*
+        
         if (needExists) {
           sp = gen.Exists(freshVars, new List<VCTrigger>(), substP);
         } 
-        */
+        
         return sp;
 
       } else if (cmd is CallCmd) {

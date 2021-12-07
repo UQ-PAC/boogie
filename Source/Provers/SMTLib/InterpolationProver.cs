@@ -76,16 +76,10 @@ namespace Microsoft.Boogie.SMTLib {
       return new InterpolationProver(libOptions, options, ctx.ExprGen, ctx);
     }
 
-    public bool Satisfiable(VCExpr A, VCExpr B, string AStr, string BStr) {
-      string AStr2;
-      string BStr2;
-      InterpolationSetup("interpolant", A, B, out AStr2, out BStr2);
-      if (AStr == "") {
-        AStr = AStr2;
-      }
-      if (BStr == "") {
-        BStr = BStr2;
-      }
+    public bool Satisfiable(VCExpr A, VCExpr B) {
+      string AStr;
+      string BStr;
+      InterpolationSetup("interpolant", A, B, out AStr, out BStr);
 
       SendThisVC("(push 1)");
 

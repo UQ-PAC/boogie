@@ -556,7 +556,7 @@ namespace Microsoft.Boogie.SMTLib
       FlushAxioms();
     }
 
-    public override SExpr EliminateQuantifiers(VCExpr predicate) {
+    public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars) {
       if (options.Solver != SolverKind.Z3) {
         throw new Exception("qe only supported in Z3");
       }
@@ -575,7 +575,7 @@ namespace Microsoft.Boogie.SMTLib
       string SMTPred = VCExpr2String(predicate, 1);
       FlushAxioms();
       if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
-        return null; // should make this better
+        return predicate; 
       }
       SendThisVC("(push 1)");
       SendThisVC("(assert " + SMTPred + ")");
@@ -615,9 +615,9 @@ namespace Microsoft.Boogie.SMTLib
         }
       }
       if (goodOut.Count() > 1) {
-        return new SExpr("and", goodOut);
+        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, new Dictionary<string, VCExprVar>());
       } else if (goodOut.Count() == 1) {
-        return goodOut[0];
+        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, new Dictionary<string, VCExprVar>());
       }
       throw new Exception("error in converting solver output from qe: " + resp.ToString());
     }
