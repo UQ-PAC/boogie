@@ -600,17 +600,9 @@ namespace Microsoft.Boogie.SMTLib
             if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
               // remove extraneous output such as ticklebool & precision info
               goodOut.Add(arg);
+            } else if (arg.Name == "true" || arg.Name == "false") {
+              goodOut.Add(arg);
             }
-              /*
-              if (arg.Name == "let") {
-                // need to figure out how to resolve lets? or option to make Z3 not output them
-                Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
-                goodOut.Add(SExpr.ResolveLet(arg, letDefs));
-              } else if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
-                // remove extraneous output such as ticklebool & precision info
-                goodOut.Add(arg);
-              }
-              */
           }
         }
       }
