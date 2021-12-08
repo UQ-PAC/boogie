@@ -222,14 +222,12 @@ namespace Microsoft.Boogie.InvariantInference {
         } */
 
         VCExpr ADisjunct = listDisjunction(A, gen);
-        //VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars);
+        VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars);
         int Bsize = SizeComputingVisitor.ComputeSize(B[r]);
         int ADsize = SizeComputingVisitor.ComputeSize(ADisjunct);
         Console.WriteLine("iteration " + iterations + " has A_disjunct size " + ADsize + ", A size " + Asize + " and B size " + Bsize);
-        //Console.WriteLine("A: " + A[t]);
-        //Console.WriteLine("B: " + B[r]);
         Console.Out.Flush();
-        if (!doConcrete && !interpol.Satisfiable(B[r], ADisjunct)) {
+        if (!doConcrete && !interpol.Satisfiable(B_rElim, ADisjunct)) {
           SExpr resp = interpol.CalculateInterpolant();
           /*
           OldOldInterpolant = OldInterpolant;
@@ -246,42 +244,33 @@ namespace Microsoft.Boogie.InvariantInference {
           //Console.WriteLine("invar candidate: " + notI.ToString());
           Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
           Console.Out.Flush();
-
-          /*
-          if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
-            Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
-            Console.Out.Flush();
-            throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
-          }
-          if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
-            Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
-            Console.Out.Flush();
-            throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
-          }
-          */
-
           if (isInductive(notI, loopHead, loopBody, K, prover, scopeVars)) {
-           
             /*
+            if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
+              Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
+              throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
+            }
+            if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
+              Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
+              throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+            }
             if (satisfiable(gen.NotSimp(gen.AndSimp(notI, gen.NotSimp(K))), prover)) {
               Console.WriteLine("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
               Console.Out.Flush();
               throw new Exception("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             */
-          
             Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
             return notI; // found invariant
-          } /* else if (isInductive(gen.And(notI, loopPElim), loopHead, loopBody, K, prover, scopeVars)) {
-            Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
-            return notI; // found invariant
-          } */
+          }
 
           //if (!ATooBig) {
           VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody, gen, translator, prover, scopeVars);
-          //VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars);
+          VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars);
           //Console.WriteLine("A: " + AElim);
-          A.Insert(t + 1, AExpr);
+          A.Insert(t + 1, AElim);
           t++;
           //}
 
@@ -360,7 +349,7 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpressionGenerator gen = prover.Context.ExprGen;
       VCExpr loopBodyWP = setWP(loopHead, loopHead, invarCandidate, loopBody, gen, translator, prover, scopeVars);
       VCExpr imp = gen.ImpliesSimp(gen.AndSimp(invarCandidate, guard), loopBodyWP);
-      //VCExpr loopBodySP = setSP(loopHead, loopHead, gen.AndSimp(invarCandidate, guard), loopBody, gen, translator, prover, scopeVars);
+      //VCExpr loopBodySP = setSP(loopHead, loopHead, gen.AndSimp(invarCandidate, guard), loopBody, gen, translator);
       //VCExpr imp = gen.ImpliesSimp(loopBodySP, invarCandidate);
       return satisfiable(imp, prover);
     }
@@ -703,7 +692,8 @@ namespace Microsoft.Boogie.InvariantInference {
           SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
           VCExpr substQ = substituter.Mutate(Q, subst);
 
-          return prover.EliminateQuantifiers(gen.Forall(freshVars, new List<VCTrigger>(), substQ), scopeVars);
+          return gen.Forall(freshVars, new List<VCTrigger>(), substQ);
+          //return prover.EliminateQuantifiers(gen.Forall(freshVars, new List<VCTrigger>(), substQ), scopeVars);
         }
       } else if (cmd is AssignCmd) {
         // x := e -> Q[x\e]
@@ -778,7 +768,8 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr substP = substituter.Mutate(P, subst);
 
           //return substP;
-          return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars);
+          return gen.Exists(freshVars, new List<VCTrigger>(), substP);
+          //return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars);
         }
 
       } else if (cmd is AssignCmd) {
@@ -822,7 +813,8 @@ namespace Microsoft.Boogie.InvariantInference {
             VCExpr substRhs = substituter.Mutate(assign.Item2, subst);
             substP = gen.AndSimp(substP, gen.Eq(assign.Item1, substRhs));
           }
-          return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars);
+          //return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars);
+          return gen.Exists(freshVars, new List<VCTrigger>(), substP);
         }
 
       } else if (cmd is CallCmd) {
