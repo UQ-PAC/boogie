@@ -1,6 +1,19 @@
-$files = Get-ChildItem "test\fib"
+$files = Get-ChildItem "test\code2inv\problem"
+$timeoutseconds = 60
+$root = Get-Location
 foreach ($f in $files) {
-  $outfile = "test\fib\absintlog\" + ($f.Name -replace "\..+") + ".txt"
-  .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /infer:j /printInstrumented $f.FullName > $outfile 
-  echo $f.Name
+  $code = {
+    param($f, $root)
+    cd $root
+    $outfile = "test\code2inv\problem\absintlog\" + ($f.Name -replace "\..+") + ".txt"
+    if (!(Test-Path $outfile)) {
+      $mathsatlog = "test\code2inv\problem\absintlog\" + ($f.Name -replace "\..+") + "interpol.txt"
+    $z3log = "test\code2inv\problem\absintlog\" + ($f.Name -replace "\..+") + "z3.txt"
+    .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /checkInfer /infer:j /printInstrumented $f.FullName > $outfile 
+    }  
+  }
+  $j = Start-Job -ScriptBlock $code -ArgumentList $f, $root
+  if (Wait-Job $j -Timeout $timeoutSeconds) { Receive-Job $j }
+  Remove-Job -force $j
+  Write-Host $f.Name
 }

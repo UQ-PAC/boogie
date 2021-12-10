@@ -148,7 +148,7 @@ namespace Microsoft.Boogie.SMTLib {
       this.Solver = SolverKind.SMTINTERPOL;
       SolverArguments.Add("-q");
       ProverName = "smtinterpol";
-      Logic = "QF_UFLIA";
+      Logic = "QF_UFLIRA";
     }
 
   }

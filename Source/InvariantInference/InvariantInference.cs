@@ -241,21 +241,23 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr I = resp.ToVC(gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
           VCExpr notI = gen.NotSimp(I);
           int size = SizeComputingVisitor.ComputeSize(notI);
-          //Console.WriteLine("invar candidate: " + notI.ToString());
+          Console.WriteLine("invar candidate: " + notI.ToString());
           Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
           Console.Out.Flush();
+
+          if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
+            Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
+            Console.Out.Flush();
+            throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
+          }
+          if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
+            Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+            Console.Out.Flush();
+            throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+          }
+
           if (isInductive(notI, loopHead, loopBody, K, prover, scopeVars)) {
             /*
-            if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
-              Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
-              Console.Out.Flush();
-              throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
-            }
-            if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
-              Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
-              Console.Out.Flush();
-              throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
-            }
             if (satisfiable(gen.NotSimp(gen.AndSimp(notI, gen.NotSimp(K))), prover)) {
               Console.WriteLine("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
               Console.Out.Flush();
