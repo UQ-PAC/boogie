@@ -1,5 +1,3 @@
-procedure unknown() returns (u: bool);
-
 procedure main()
 {
     var z1:int;

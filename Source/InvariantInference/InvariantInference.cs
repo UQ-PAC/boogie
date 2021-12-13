@@ -241,7 +241,7 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr I = resp.ToVC(gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
           VCExpr notI = gen.NotSimp(I);
           int size = SizeComputingVisitor.ComputeSize(notI);
-          Console.WriteLine("invar candidate: " + notI.ToString());
+          //Console.WriteLine("invar candidate: " + notI.ToString());
           Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
           Console.Out.Flush();
 
@@ -517,6 +517,9 @@ namespace Microsoft.Boogie.InvariantInference {
         GotoCmd successors = currentBlock.TransferCmd as GotoCmd;
         VCExpr blockQ_In = VCExpressionGenerator.True;
         bool successorsDone = true;
+        if (successors.labelTargets.Count == 0) {
+          blockQ_In = VCExpressionGenerator.True;
+        }
         foreach (Block successor in successors.labelTargets) {
           if (blocks.Contains(successor)) {
             if (blockWPs.ContainsKey(successor)) {
@@ -571,6 +574,9 @@ namespace Microsoft.Boogie.InvariantInference {
         Block currentBlock = toTry.Dequeue();
         VCExpr blockP_In = VCExpressionGenerator.False;
         bool predecessorsDone = true;
+        if (currentBlock.Predecessors.Count == 0) {
+          blockP_In = VCExpressionGenerator.True;
+        }
         foreach (Block predecessor in currentBlock.Predecessors) {
           if (blocks.Contains(predecessor)) {
             if (blockSPs.ContainsKey(predecessor)) {
@@ -659,6 +665,10 @@ namespace Microsoft.Boogie.InvariantInference {
         AssertCmd ac = (AssertCmd) cmd;
         VCExpr A = translator.Translate(ac.Expr);
 
+        // handles edge case where loop has no postcondition - instead use last assertion as base case 
+        if (Q == VCExpressionGenerator.False) {
+          return gen.NotSimp(A);
+        }
         return gen.AndSimp(A, Q);
       } else if (cmd is AssumeCmd) {
         // assume A -> A ==> Q
