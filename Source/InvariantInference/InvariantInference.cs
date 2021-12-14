@@ -223,10 +223,19 @@ namespace Microsoft.Boogie.InvariantInference {
 
         VCExpr ADisjunct = listDisjunction(A, gen);
         VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars);
+
+        if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+          Console.WriteLine("B: " + B_rElim);
+          Console.Out.Flush();
+        }
+
         int Bsize = SizeComputingVisitor.ComputeSize(B[r]);
         int ADsize = SizeComputingVisitor.ComputeSize(ADisjunct);
-        Console.WriteLine("iteration " + iterations + " has A_disjunct size " + ADsize + ", A size " + Asize + " and B size " + Bsize);
-        Console.Out.Flush();
+        if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All || CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
+          Console.WriteLine("iteration " + iterations + " has A_disjunct size " + ADsize + ", A size " + Asize + " and B size " + Bsize);
+          Console.Out.Flush();
+        }
+
         if (!doConcrete && !interpol.Satisfiable(B_rElim, ADisjunct)) {
           SExpr resp = interpol.CalculateInterpolant();
           /*
@@ -241,9 +250,15 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr I = resp.ToVC(gen, translator, scopeVars, new Dictionary<String, VCExprVar>());
           VCExpr notI = gen.NotSimp(I);
           int size = SizeComputingVisitor.ComputeSize(notI);
-          //Console.WriteLine("invar candidate: " + notI.ToString());
-          Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
-          Console.Out.Flush();
+          if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+            Console.WriteLine("invar candidate: " + notI.ToString());
+            Console.Out.Flush();
+          }
+
+          if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All || CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
+            Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
+            Console.Out.Flush();
+          }
 
           if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
             Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
@@ -271,7 +286,10 @@ namespace Microsoft.Boogie.InvariantInference {
           //if (!ATooBig) {
           VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody, gen, translator, prover, scopeVars);
           VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars);
-          //Console.WriteLine("A: " + AElim);
+          if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+            Console.WriteLine("A: " + AElim);
+            Console.Out.Flush();
+          }
           A.Insert(t + 1, AElim);
           t++;
           //}

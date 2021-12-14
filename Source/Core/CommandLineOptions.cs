@@ -810,6 +810,14 @@ namespace Microsoft.Boogie
 
     public InterpolantSolver InterpolantSolverKind { get; set; } = InterpolantSolver.MathSAT;
 
+    public enum InterpolationDebug {
+      None,
+      SizeOnly,
+      All
+    }
+
+    public InterpolationDebug InterpolationDebugLevel { get; set; } = InterpolationDebug.None;
+
     public string CivlDesugaredFile  { get; set; } = null;
 
     public bool TrustMoverTypes {
@@ -1044,6 +1052,30 @@ namespace Microsoft.Boogie
           }
 
           return true;
+
+        case "interpolationDebug": 
+          {
+            int level = 0;
+            if (ps.GetNumericArgument(ref level, 3)) {
+              switch (level) {
+                case 0:
+                  InterpolationDebugLevel = InterpolationDebug.None;
+                  break;
+                case 1:
+                  InterpolationDebugLevel = InterpolationDebug.SizeOnly;
+                  break;
+                case 2:
+                  InterpolationDebugLevel = InterpolationDebug.All;
+                  break;
+                default: {
+                    Contract.Assert(false);
+                    throw new cce.UnreachableException();
+                  } 
+              }
+            }
+
+            return true;
+          }
 
         case "infer":
           if (ps.ConfirmArgumentCount(1))
