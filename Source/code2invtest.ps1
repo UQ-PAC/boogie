@@ -1,4 +1,4 @@
-$files = Get-ChildItem "test\code2inv"
+$files = Get-ChildItem "test\code2inv\*" -File -Include "*.bpl"
 $timeoutseconds = 60
 $root = Get-Location
 foreach ($f in $files) {
@@ -9,7 +9,7 @@ foreach ($f in $files) {
     if (!(Test-Path $outfile)) {
       $mathsatlog = "test\code2inv\log\" + ($f.Name -replace "\..+") + "interpol.txt"
     $z3log = "test\code2inv\log\" + ($f.Name -replace "\..+") + "z3.txt"
-    .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /checkInfer /inferinterpolant:mathsat /printInstrumented $f.FullName > $outfile 
+    .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /interpolationDebug:1 /checkInfer /inferinterpolant:mathsat /printInstrumented $f.FullName > $outfile 
     }  
   }
   $j = Start-Job -ScriptBlock $code -ArgumentList $f, $root

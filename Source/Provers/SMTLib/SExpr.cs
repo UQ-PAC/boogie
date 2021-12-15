@@ -324,6 +324,252 @@ namespace Microsoft.Boogie
       return new SExpr(sexpr.Name, newArgs);
     }
 
+    /*
+    public VCExpr ToVCDisambig(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars) {
+      VCExpr a = ToVC(gen, translator, scopeVars, new Dictionary<string, VCExprVar>());
+      VCExpr b = ToVC(gen, translator, scopeVars);
+
+      if (a.ToString() != b.ToString()) {
+        Console.WriteLine("sexpr conversion difference!!!");
+        Console.WriteLine(a);
+        Console.WriteLine(b);
+        Console.Out.Flush();
+        throw new Exception("fafsdfae");
+      }
+
+      if (CommandLineOptions.Clo.oldVCConvert) {
+        return a;
+      } else {
+        return b;
+      }
+    }
+    */
+
+    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars) {
+      Stack<SExpr> todo = new Stack<SExpr>();
+      Stack<SExpr> waiting = new Stack<SExpr>();
+      Stack<VCExpr> results = new Stack<VCExpr>();
+      Stack<VCExprLetBinding> bindingsStack = new Stack<VCExprLetBinding>();
+      HashSet<string> letNames = new HashSet<string>();
+      Dictionary<string, VCExprVar> boundVars = new Dictionary<string, VCExprVar>();
+      todo.Push(this);
+      while (todo.Count > 0) {
+        SExpr next = todo.Pop();
+        if (next.Name == "let") {
+          foreach (SExpr def in next.Arguments[0].Arguments) {
+            letNames.Add(def.Name);
+          }
+        }
+        waiting.Push(next);
+        foreach (SExpr arg in next.Arguments) {
+          todo.Push(arg);
+        }
+      }
+      while (waiting.Count > 0) {
+        SExpr next = waiting.Pop();
+        if (next.ArgCount == 0) {
+          if (next.Name == "true") {
+            results.Push(VCExpressionGenerator.True);
+            continue;
+          } else if (next.Name == "false") {
+            results.Push(VCExpressionGenerator.False);
+            continue;
+          } else {
+            BigNum num;
+            BigDec dec;
+            if (next.Name.All(Char.IsDigit)) {
+              if (BigNum.TryParse(next.Name, out num)) {
+                // int
+                results.Push(gen.Integer(num));
+                continue;
+              }
+            }
+            if (next.Name.All(c => Char.IsDigit(c) || c == '.' || c == 'e')) {
+              if (BigDec.TryParse(next.Name, out dec)) {
+                // real
+                results.Push(gen.Real(dec));
+                continue;
+              }
+            }
+            // identifier
+            bool varFound = false;
+            foreach (Variable v in scopeVars) {
+              if (v.Name.Equals(next.Name)) {
+                results.Push(translator.LookupVariable(v));
+                varFound = true;
+                break;
+              }
+            }
+            if (varFound) {
+              continue;
+            }
+            foreach (KeyValuePair<string, VCExprVar> kv in boundVars) {
+              if (kv.Key.Equals(next.Name)) {
+                results.Push(kv.Value);
+                varFound = true;
+                break;
+              }
+            }
+            if (varFound) {
+              continue;
+            }
+
+            throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+          }
+        } else {
+          if (next.Name == "") {
+            continue;
+          }
+          if (letNames.Contains(next.Name)) {
+            VCExpr e = results.Pop();
+            VCExprVar bound = gen.Variable(next.Name, e.Type);
+            bindingsStack.Push(gen.LetBinding(bound, e));
+            boundVars.Add(next.Name, bound);
+            continue;
+          } else if (next.Name == "let") {
+            List<VCExprLetBinding> bindings = new List<VCExprLetBinding>();
+            for (int i = 0; i < next.Arguments[0].ArgCount; i++) {
+              bindings.Add(bindingsStack.Pop());
+            }
+            bindings.Reverse();
+            results.Push(gen.Let(bindings, results.Pop()));
+            continue;
+          }
+          List<VCExpr> args = new List<VCExpr>();
+          for (int i = 0; i < next.ArgCount; i++) {
+            args.Add(results.Pop());
+          }
+          args.Reverse();
+          VCExpr combinedArgs;
+          switch (next.Name) {
+            case "and":
+              combinedArgs = gen.AndSimp(args[0], args[1]);
+              for (int i = 2; i < args.Count; i++) {
+                combinedArgs = gen.AndSimp(combinedArgs, args[i]);
+              }
+              results.Push(combinedArgs);
+              continue;
+            case "or":
+              combinedArgs = gen.OrSimp(args[0], args[1]);
+              for (int i = 2; i < args.Count; i++) {
+                combinedArgs = gen.OrSimp(combinedArgs, args[i]);
+              }
+              results.Push(combinedArgs);
+              continue;
+            case "not":
+              results.Push(gen.NotSimp(args[0]));
+              continue;
+            case "=>":
+              results.Push(gen.ImpliesSimp(args[0], args[1]));
+              continue;
+            case "+":
+              if (args[0].Type.IsInt) {
+                combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { args[0], args[1] });
+                for (int i = 2; i < args.Count; i++) {
+                  combinedArgs = gen.Function(VCExpressionGenerator.AddIOp, new List<VCExpr> { combinedArgs, args[i] });
+                }
+                results.Push(combinedArgs);
+                continue;
+              } else if (args[0].Type.IsReal) {
+                combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { args[0], args[1] });
+                for (int i = 2; i < args.Count; i++) {
+                  combinedArgs = gen.Function(VCExpressionGenerator.AddROp, new List<VCExpr> { combinedArgs, args[i] });
+                }
+                results.Push(combinedArgs);
+                continue;
+              }
+              throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+            case "-":
+              if (args.Count == 1) {
+                if (args[0] is VCExprIntLit) {
+                  BigNum val = ((VCExprIntLit)args[0]).Val;
+                  results.Push(gen.Integer(-val));
+                  continue;
+                } else if (args[0] is VCExprRealLit) {
+                  BigDec val = ((VCExprRealLit)args[0]).Val;
+                  results.Push(gen.Real(-val));
+                  continue;
+                } else {
+                  if (args[0].Type.IsInt) {
+                    results.Push(gen.Function(VCExpressionGenerator.SubIOp, gen.Integer(BigNum.ZERO), args[0]));
+                    continue;
+                  } else if (args[0].Type.IsReal) {
+                    results.Push(gen.Function(VCExpressionGenerator.SubROp, gen.Real(BigDec.ZERO), args[0]));
+                    continue;
+                  }
+                }
+              } else if (args.Count == 2) {
+                if (args[0].Type.IsInt) {
+                  results.Push(gen.Function(VCExpressionGenerator.SubIOp, args));
+                  continue;
+                } else if (args[0].Type.IsReal) {
+                  results.Push(gen.Function(VCExpressionGenerator.SubROp, args));
+                  continue;
+                }
+              }
+              throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+            case "*":
+              if (args[0].Type.IsInt) {
+                combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { args[0], args[1] });
+                for (int i = 2; i < args.Count; i++) {
+                  combinedArgs = gen.Function(VCExpressionGenerator.MulIOp, new List<VCExpr> { combinedArgs, args[i] });
+                }
+                results.Push(combinedArgs);
+                continue;
+              } else if (args[0].Type.IsReal) {
+                combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { args[0], args[1] });
+                for (int i = 2; i < args.Count; i++) {
+                  combinedArgs = gen.Function(VCExpressionGenerator.MulROp, new List<VCExpr> { combinedArgs, args[i] });
+                }
+                results.Push(combinedArgs);
+                continue;
+              }
+              throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+            case "div":
+              results.Push(gen.Function(VCExpressionGenerator.DivIOp, args));
+              continue;
+            case "/":
+              results.Push(gen.Function(VCExpressionGenerator.DivROp, args));
+              continue;
+            case "mod":
+              results.Push(gen.Function(VCExpressionGenerator.ModOp, args));
+              continue;
+            case "=":
+              results.Push(gen.Function(VCExpressionGenerator.EqOp, args));
+              continue;
+            case ">":
+              results.Push(gen.Function(VCExpressionGenerator.GtOp, args));
+              continue;
+            case "<":
+              results.Push(gen.Function(VCExpressionGenerator.LtOp, args));
+              continue;
+            case "<=":
+              results.Push(gen.Function(VCExpressionGenerator.LeOp, args));
+              continue;
+            case ">=":
+              results.Push(gen.Function(VCExpressionGenerator.GeOp, args));
+              continue;
+            case "ite":
+              results.Push(gen.Function(VCExpressionGenerator.IfThenElseOp, args));
+              continue;
+            case "to_int":
+              results.Push(gen.Function(VCExpressionGenerator.ToIntOp, args));
+              continue;
+            case "to_real":
+              results.Push(gen.Function(VCExpressionGenerator.ToRealOp, args));
+              continue;
+            default:
+              throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+          }
+        }
+      }
+      if (results.Count != 1) {
+        throw new Exception("something went wrong wiht conversion to VCExpr: " + this);
+      }
+      return results.Pop();
+    }
+
+    /*
     public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, Dictionary<String, VCExprVar> boundVars) {
       // still need to add floats
       if (Name == "let") {
@@ -479,6 +725,7 @@ namespace Microsoft.Boogie
       }
       throw new NotImplementedException("unimplemented for conversion to VCExpr: " + this);
     }
+    */
   }
 
 }

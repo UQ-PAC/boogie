@@ -607,9 +607,9 @@ namespace Microsoft.Boogie.SMTLib
         }
       }
       if (goodOut.Count() > 1) {
-        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, new Dictionary<string, VCExprVar>());
+        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
       } else if (goodOut.Count() == 1) {
-        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, new Dictionary<string, VCExprVar>());
+        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
       }
       throw new Exception("error in converting solver output from qe: " + resp.ToString());
     }
