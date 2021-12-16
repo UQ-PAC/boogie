@@ -817,6 +817,13 @@ namespace Microsoft.Boogie
     }
 
     public InterpolationDebug InterpolationDebugLevel { get; set; } = InterpolationDebug.None;
+    public enum QETactic {
+      qe,
+      qe2,
+      qe_rec
+    }
+
+    public QETactic InterpolationQETactic { get; set; } = QETactic.qe;
 
     public string CivlDesugaredFile  { get; set; } = null;
 
@@ -1031,7 +1038,7 @@ namespace Microsoft.Boogie
       var args = ps.args; // convenient synonym
       switch (name)
       {
-        case "inferinterpolant":
+        case "inferInterpolant":
           if (ps.args.Length == 0) {
             InterpolantSolverKind = InterpolantSolver.MathSAT;
             InferInvariantsInterpolant = true;
@@ -1071,6 +1078,27 @@ namespace Microsoft.Boogie
                     Contract.Assert(false);
                     throw new cce.UnreachableException();
                   } 
+              }
+            }
+
+            return true;
+          }
+
+        case "interpolationQE": {
+            if (ps.ConfirmArgumentCount(1)) {
+              switch (args[ps.i]) {
+                case "qe":
+                  InterpolationQETactic = QETactic.qe;
+                  break;
+                case "qe2":
+                  InterpolationQETactic = QETactic.qe2;
+                  break;
+                case "qe_rec":
+                  InterpolationQETactic = QETactic.qe_rec;
+                  break;
+                default:
+                  ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);
+                  break;
               }
             }
 

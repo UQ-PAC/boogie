@@ -8,8 +8,8 @@ foreach ($f in $files) {
     $outfile = "test\loop-new\log\" + ($f.Name -replace "\..+") + ".txt"
     if (!(Test-Path $outfile)) {
       $mathsatlog = "test\loop-new\log\" + ($f.Name -replace "\..+") + "interpol.txt"
-    $z3log = "test\loop-new\log\" + ($f.Name -replace "\..+") + "z3.txt"
-    .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /checkInfer /inferinterpolant:smtinterpol /printInstrumented $f.FullName > $outfile 
+      $z3log = "test\loop-new\log\" + ($f.Name -replace "\..+") + "z3.txt"
+      .\BoogieDriver\bin\Debug\net5.0\BoogieDriver.exe /checkInfer /inferinterpolant:smtinterpol /printInstrumented $f.FullName > $outfile 
     }  
   }
   $j = Start-Job -ScriptBlock $code -ArgumentList $f, $root

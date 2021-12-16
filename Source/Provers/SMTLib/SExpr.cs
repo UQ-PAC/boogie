@@ -431,6 +431,9 @@ namespace Microsoft.Boogie
             for (int i = 0; i < next.Arguments[0].ArgCount; i++) {
               bindings.Add(bindingsStack.Pop());
             }
+            foreach (VCExprLetBinding binding in bindings) {
+              boundVars.Remove(binding.V.Name);
+            }
             bindings.Reverse();
             results.Push(gen.Let(bindings, results.Pop()));
             continue;

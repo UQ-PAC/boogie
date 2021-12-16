@@ -580,7 +580,13 @@ namespace Microsoft.Boogie.SMTLib
       SendThisVC("(push 1)");
       SendThisVC("(assert " + SMTPred + ")");
       FlushLogFile();
-      SendThisVC("(apply qe)");
+      if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe) {
+        SendThisVC("(apply qe)");
+      } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe2) {
+        SendThisVC("(apply qe2)");
+      } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe_rec) {
+        SendThisVC("(apply qe_rec)");
+      }
 
       var resp = Process.GetProverResponse();
       //Console.WriteLine(SMTPred);
