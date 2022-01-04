@@ -2298,6 +2298,39 @@ namespace Microsoft.Boogie
                 print Boogie program after it has been instrumented with
                 invariants
 
+  
+  ---- Inference (using interpolation) options -------------------------------
+
+  /inferInterpolant:<solver>
+                use craig interpolation to infer loop invariants
+                <solver> must specify the SMT solver used to calculate
+                interpolants:
+                   mathsat - use MathSAT SMT solver for interpolation
+                   smtinterpol - use SMTInterpol SMT solver for interpolation
+  
+  /interpolationQE:<tactic> 
+               specify quantifier elimination tactic for Z3 to use in the
+               process of inferring loop invariants by interpolation
+               <tactic>:
+                  qe - use Z3 qe tactic (default)
+                  qe2 - use Z3 qe2 tactic
+                  qe_rec - use Z3 qe_rec tactic
+  
+  /interpolationDebug:<n>
+                0 - no debug messages about inferring loop invariants using
+                    interpolation (default)
+                1 - print size of interpolant and A & B predicates after
+                    each iteration, also do extra checks for soundness
+                2 - effects of 1 but also print the A & B predicates and
+                    the interpolant for each iteration
+  
+  /interpolationProverLog:<file>
+                Log input for the theorem prover used for interpolation to 
+                <file>
+
+  /interpolationLogAppend
+                Append (not overwrite) the specified prover log file
+
   ---- Debugging and general tracing options ---------------------------------
 
   /trace        blurt out various debug trace information

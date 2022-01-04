@@ -281,9 +281,10 @@ namespace Microsoft.Boogie.InvariantInference {
               throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
           }
-
+          
           if (isInductive(notI, loopHead, loopBody, K, prover, scopeVars)) {
-            /*
+            /* 
+             * this catches some potential unsoundness
             if (satisfiable(gen.NotSimp(gen.AndSimp(notI, NotK)), prover)) {
               Console.WriteLine("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
               Console.Out.Flush();
@@ -293,13 +294,16 @@ namespace Microsoft.Boogie.InvariantInference {
             Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
             return notI; // found invariant
           }
+         
 
-          // extra check, sometimes algorithm gives invariant candidate I such that P && I is inductive - if this is the case, just using I as invariant is good enough for Boogie
-          
+
+          // extra check - sometimes algorithm gives invariant candidate !I such that P && !I is inductive but !I isn't inductive, if this is the case, just using !I as invariant is good enough for Boogie
+          /*
           if (isInductive(gen.AndSimp(loopPElim, notI), loopHead, loopBody, K, prover, scopeVars)) {
             Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
             return notI; // found invariant
           }
+          */
 
           //if (!ATooBig) {
           VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody, gen, translator, prover, scopeVars);
