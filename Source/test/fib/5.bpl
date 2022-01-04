@@ -18,5 +18,3 @@ procedure fib5(flag: bool)
   }
   assert(j>=i);
 }
-
-procedure unknown() returns (u: bool);

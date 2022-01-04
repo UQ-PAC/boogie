@@ -37,7 +37,7 @@ namespace Microsoft.Boogie.SMTLib
   public class SMTLibProverOptions : ProverOptions
   {
     public bool UseWeights = true;
-    public bool UseTickleBool => Solver == SolverKind.Z3;
+    public bool UseTickleBool => Solver == SolverKind.Z3 && !InterpolationQE;
     public SolverKind Solver = SolverKind.Z3;
     public List<OptionValue> SmtOptions = new List<OptionValue>();
     public List<string> SolverArguments = new List<string>();

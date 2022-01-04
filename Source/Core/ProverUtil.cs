@@ -15,6 +15,7 @@ namespace Microsoft.Boogie
     public bool AppendLogFile = false;
 
     public bool SeparateLogFiles = false;
+    public bool InterpolationQE = false;
 
     // Say (DBG_WAS_VALID) or (DBG_WAS_INVALID) after query
     public bool ForceLogStatus = false;

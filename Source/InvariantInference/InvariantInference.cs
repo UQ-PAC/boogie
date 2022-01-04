@@ -17,7 +17,7 @@ namespace Microsoft.Boogie.InvariantInference {
       Dictionary<Procedure, Implementation[]> procedureImplementations = ComputeProcImplMap(program);
 
       ProverInterface prover = ProverInterface.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
-        CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit);
+        CommandLineOptions.Clo.ProverLogFileAppend, CommandLineOptions.Clo.TimeLimit, true);
 
       InterpolationProver interpol = InterpolationProver.CreateProver(program, CommandLineOptions.Clo.InterpolationLogFilePath,
         CommandLineOptions.Clo.InterpolationLogFileAppend, CommandLineOptions.Clo.TimeLimit);
@@ -201,8 +201,16 @@ namespace Microsoft.Boogie.InvariantInference {
 
       // backward squeezing algorithm
       VCExpr K = getLoopGuard(loopHead, loopBody, gen, translator); // guard 
+      VCExpr NotK;
+      if (K == null) {
+        K = VCExpressionGenerator.True;
+        NotK = VCExpressionGenerator.True;
+      } else {
+        NotK = gen.NotSimp(K);
+      }
+
       List<VCExpr> A = new List<VCExpr> { loopPElim }; //A_0 = P
-      List<VCExpr> B = new List<VCExpr> { gen.AndSimp(gen.NotSimp(K), gen.NotSimp(loopQElim)) }; //B_0 = !K && !Q
+      List<VCExpr> B = new List<VCExpr> { gen.AndSimp(NotK, gen.NotSimp(loopQElim)) }; //B_0 = !K && !Q
       int t = 0;
       int r = 0;
       int concrete = 0;
@@ -249,36 +257,46 @@ namespace Microsoft.Boogie.InvariantInference {
           } */
           VCExpr I = resp.ToVC(gen, translator, scopeVars);
           VCExpr notI = gen.NotSimp(I);
-          int size = SizeComputingVisitor.ComputeSize(notI);
           if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("invar candidate: " + notI.ToString());
             Console.Out.Flush();
           }
 
           if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All || CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
+            int size = SizeComputingVisitor.ComputeSize(notI);
             Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
             Console.Out.Flush();
           }
 
-          if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, gen.NotSimp(K)), loopQ), prover)) {
-            Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
-            Console.Out.Flush();
-            throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
-          }
-          if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
-            Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + " iterations, including " + concrete + " concrete steps");
-            Console.Out.Flush();
-            throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+          if (CommandLineOptions.Clo.InterpolationDebugLevel != CommandLineOptions.InterpolationDebug.None) {
+            // extra checks to catch potential unsoundness in algorithm, only do when debug info enabled
+            if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(notI, NotK), loopQ), prover)) {
+              Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
+              throw new Exception("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + "iterations, including " + concrete + " concrete steps");
+            }
+            if (!satisfiable(gen.ImpliesSimp(loopP, notI), prover)) {
+              Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + " iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
+              throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+            }
           }
 
           if (isInductive(notI, loopHead, loopBody, K, prover, scopeVars)) {
             /*
-            if (satisfiable(gen.NotSimp(gen.AndSimp(notI, gen.NotSimp(K))), prover)) {
+            if (satisfiable(gen.NotSimp(gen.AndSimp(notI, NotK)), prover)) {
               Console.WriteLine("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
               Console.Out.Flush();
               throw new Exception("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             */
+            Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
+            return notI; // found invariant
+          }
+
+          // extra check, sometimes algorithm gives invariant candidate I such that P && I is inductive - if this is the case, just using I as invariant is good enough for Boogie
+          
+          if (isInductive(gen.AndSimp(loopPElim, notI), loopHead, loopBody, K, prover, scopeVars)) {
             Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
             return notI; // found invariant
           }
@@ -314,8 +332,8 @@ namespace Microsoft.Boogie.InvariantInference {
               oldInterpolantIndex = 0;
             } */
 
-            B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody, gen, translator, prover, scopeVars))));
-            r++;
+          B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody, gen, translator, prover, scopeVars))));
+          r++;
           //}
         } else {
           if (r <= concrete) {
@@ -341,14 +359,17 @@ namespace Microsoft.Boogie.InvariantInference {
       if (successors.labelTargets != null) {
         foreach (Block nextBlock in successors.labelTargets) {
           if (loopBody.Contains(nextBlock)) {
-            if (nextBlock.Cmds[0] is AssumeCmd) {
-              AssumeCmd ac = (AssumeCmd)nextBlock.Cmds[0];
-              return translator.Translate(ac.Expr);
+            if (nextBlock.Cmds.Count > 0) {
+              if (nextBlock.Cmds[0] is AssumeCmd) {
+                AssumeCmd ac = (AssumeCmd)nextBlock.Cmds[0];
+                return translator.Translate(ac.Expr);
+              }
             }
           }
         }
       }
-      throw new cce.UnreachableException();
+      // case where loop exit is non-deterministic - no guard exists
+      return null;
     }
 
     private static bool satisfiable(VCExpr predicate, ProverInterface prover) {

@@ -616,6 +616,9 @@ namespace Microsoft.Boogie.SMTLib
         return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
       } else if (goodOut.Count() == 1) {
         return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
+      } else if (goodOut.Count() == 0) {
+        // empty goal returned - I think this should mean it simplified things to true?
+        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
       }
       throw new Exception("error in converting solver output from qe: " + resp.ToString());
     }

@@ -370,12 +370,19 @@ namespace Microsoft.Boogie
 
   public abstract class ProverInterface
   {
+    public static ProverInterface CreateProver(Program prog, string /*?*/ logFilePath, bool appendLogFile, uint timeout, bool forInterpolationQE) {
+      return CreateProver(prog, logFilePath, appendLogFile, timeout, -1, forInterpolationQE);
+    }
+
     public static ProverInterface CreateProver(Program prog, string /*?*/ logFilePath, bool appendLogFile, uint timeout,
-      int taskID = -1)
+      int taskID = -1, bool forInterpolationQE = false)
     {
       Contract.Requires(prog != null);
 
       ProverOptions options = cce.NonNull(CommandLineOptions.Clo.TheProverFactory).BlankProverOptions();
+      if (forInterpolationQE) {
+        options.InterpolationQE = true;
+      }
 
       if (logFilePath != null)
       {
