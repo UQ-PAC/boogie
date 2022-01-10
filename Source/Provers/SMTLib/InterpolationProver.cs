@@ -113,11 +113,20 @@ namespace Microsoft.Boogie.SMTLib {
     }
 
     // must have called Satisfiable first
-    public SExpr CalculateInterpolant() {
+    public SExpr CalculateInterpolant(bool Forward) {
       if (options.Solver == SolverKind.MATHSAT) {
-        SendThisVC("(get-interpolant (g1))");
+        if (Forward) {
+          SendThisVC("(get-interpolant (g2))");
+        } else {
+          SendThisVC("(get-interpolant (g1))");
+        }
       } else if (options.Solver == SolverKind.SMTINTERPOL) {
-        SendThisVC("(get-interpolants g1 g2)");
+        if (Forward) {
+          SendThisVC("(get-interpolants g2 g1)");
+        }
+        else {
+          SendThisVC("(get-interpolants g1 g2)");
+        }
       }
 
       SExpr resp = Process.GetProverResponse();

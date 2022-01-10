@@ -825,6 +825,8 @@ namespace Microsoft.Boogie
 
     public QETactic InterpolationQETactic { get; set; } = QETactic.qe;
 
+    public bool ForwardSqueeze = false;
+
     public string CivlDesugaredFile  { get; set; } = null;
 
     public bool TrustMoverTypes {
@@ -1813,7 +1815,8 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("useBaseNameForFileName", ref UseBaseNameForFileName) ||
               ps.CheckBooleanFlag("freeVarLambdaLifting", ref FreeVarLambdaLifting) ||
               ps.CheckBooleanFlag("pruneFunctionsAndAxioms", ref PruneFunctionsAndAxioms) ||
-              ps.CheckBooleanFlag("warnNotEliminatedVars", ref WarnNotEliminatedVars)
+              ps.CheckBooleanFlag("warnNotEliminatedVars", ref WarnNotEliminatedVars) ||
+              ps.CheckBooleanFlag("forwardSqueeze", ref ForwardSqueeze)
           )
           {
             // one of the boolean flags matched
@@ -2330,6 +2333,10 @@ namespace Microsoft.Boogie
 
   /interpolationLogAppend
                 Append (not overwrite) the specified prover log file
+
+  /forwardSqueeze
+               use forward squeezing algorithm instead of the default
+               backward algorithm
 
   ---- Debugging and general tracing options ---------------------------------
 
