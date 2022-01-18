@@ -781,15 +781,27 @@ namespace Microsoft.Boogie.InvariantInference {
         HavocCmd hc = (HavocCmd) cmd;
         List<VCExprVar> vars = new List<VCExprVar>();
         HashSet<VCExprVar> QFree = FreeVariableCollector.FreeTermVariables(Q);
+        List<VCExpr> whereExprs = new List<VCExpr>();
         foreach (IdentifierExpr i in hc.Vars) {
           VCExprVar v = (VCExprVar)translator.Translate(i);
           if (QFree.Contains(v)) {
             vars.Add(v);
           }
+          if (i.Decl.TypedIdent.WhereExpr != null) {
+            whereExprs.Add(translator.Translate(i.Decl.TypedIdent.WhereExpr));
+          }
         }
+
+        if (whereExprs.Count > 0) {
+          VCExpr where = VCExpressionGenerator.True;
+          foreach (VCExpr w in whereExprs) {
+            where = gen.AndSimp(where, w);
+          }
+          Q = gen.ImpliesSimp(where, Q);
+        }
+
         if (vars.Count == 0) {
           return Q;
-
         } else {
           Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
           List<VCExprVar> freshVars = new List<VCExprVar>();
@@ -856,8 +868,12 @@ namespace Microsoft.Boogie.InvariantInference {
         // havoc x -> exists x' :: P[x\x']
         HavocCmd hc = (HavocCmd)cmd;
         List<VCExprVar> vars = new List<VCExprVar>();
+        List<VCExpr> whereExprs = new List<VCExpr>();
         foreach (IdentifierExpr i in hc.Vars) {
           vars.Add((VCExprVar)translator.Translate(i));
+          if (i.Decl.TypedIdent.WhereExpr != null) {
+            whereExprs.Add(translator.Translate(i.Decl.TypedIdent.WhereExpr));
+          }
         }
         Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
         List<VCExprVar> freshVars = new List<VCExprVar>();
@@ -872,6 +888,11 @@ namespace Microsoft.Boogie.InvariantInference {
           }
         }
         if (freshVars.Count == 0) {
+          if (whereExprs.Count > 0) {
+            foreach (VCExpr w in whereExprs) {
+              P = gen.AndSimp(P, w);
+            }
+          }
           return P;
         } else {
           VCExprSubstitution subst = new VCExprSubstitution(toSubst, new Dictionary<TypeVariable, Type>());
@@ -879,7 +900,13 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr substP = substituter.Mutate(P, subst);
 
           //return substP;
-          return gen.Exists(freshVars, new List<VCTrigger>(), substP);
+          substP = gen.Exists(freshVars, new List<VCTrigger>(), substP);
+          if (whereExprs.Count > 0) {
+            foreach (VCExpr w in whereExprs) {
+              substP = gen.AndSimp(substP, w);
+            }
+          }
+          return substP;
           //return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars);
         }
 
