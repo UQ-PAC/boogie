@@ -68,18 +68,14 @@ namespace Microsoft.Boogie.InvariantInference {
       List<Cmd> newCommands = new List<Cmd>();
       PredicateCmd cmd;
       var kv = new QKeyValue(Token.NoToken, "inferred", new List<object>(), null);
-      if (CommandLineOptions.Clo.InstrumentWithAsserts) {
-        cmd = new AssertCmd(Token.NoToken, inv, kv);
-      } else {
-        cmd = new AssumeCmd(Token.NoToken, inv, kv);
-      }
+      cmd = new AssertCmd(Token.NoToken, inv, kv);
 
       newCommands.Add(cmd);
       newCommands.AddRange(b.Cmds);
       b.Cmds = newCommands;
     }
 
-    // more robust would be to use visitor
+    // more robust would be to use visitor?
     // also need to take into account stack overflows potentially? 
     private static Expr VCtoExpr(VCExpr vc, IEnumerable<Variable> scopeVars) {
       if (vc == VCExpressionGenerator.True) {
@@ -228,8 +224,11 @@ namespace Microsoft.Boogie.InvariantInference {
           loopBody.Add(b);
         }
       }
+      if (loopBody.Count == 0) {
+        loopBody.Add(loopHead);
+      }
 
-      // backward squeezing algorithm
+      // squeezing algorithm
       VCExpr K = getLoopGuard(loopBody); // guard 
       VCExpr NotK;
       if (K == null) {
@@ -247,18 +246,9 @@ namespace Microsoft.Boogie.InvariantInference {
       int r = 0;
       int concrete = 0;
       int iterations = 0;
-      bool ATooBig = false;
       bool doConcrete = false;
-      string[] oldInterpolants = new string[4];
-      int oldInterpolantIndex = 0;
       while (true) {
         iterations++;
-        /*
-        if (!ATooBig) {
-          if (Asize > 10000) {
-            ATooBig = true;
-          }
-        } */
 
         VCExpr ADisjunct = listDisjunction(A);
         VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars);
@@ -279,15 +269,6 @@ namespace Microsoft.Boogie.InvariantInference {
         if (!doConcrete && !interpol.Satisfiable(B_rElim, ADisjunct)) {
           // adjust for forward
           SExpr resp = interpol.CalculateInterpolant(Forward);
-          /*
-          OldOldInterpolant = OldInterpolant;
-          OldInterpolant = interpolantStr;
-
-          Console.WriteLine("interpolant: " + interpolantStr);
-          if (interpolantStr == OldInterpolant && interpolantStr == OldOldInterpolant) {
-            doConcrete = true;
-            continue;
-          } */
           VCExpr I = resp.ToVC(gen, translator, scopeVars);
           VCExpr InvariantCandidate;
           if (Forward) {
@@ -344,7 +325,6 @@ namespace Microsoft.Boogie.InvariantInference {
           }
           */
 
-          //if (!ATooBig) {
           VCExpr AExpr;
           if (Forward) {
             AExpr = setSP(loopHead, loopHead, gen.AndSimp(I, K), loopBody);
@@ -359,27 +339,6 @@ namespace Microsoft.Boogie.InvariantInference {
           A.Insert(t + 1, AElim);
           t++;
 
-          //}
-
-          /*
-          string interpolant = resp.ToString();
-          int interpolantMatches = 0;
-          for (int i = 0; i < 4; i++) {
-            if (oldInterpolants[i] == interpolant) {
-              interpolantMatches++;
-            }
-          }
-          if (interpolantMatches >= 2) {
-            doConcrete = true;
-            for (int i = 0; i < 4; i++) {
-              oldInterpolants[i] = null;
-            }
-          } else { 
-            oldInterpolants[oldInterpolantIndex] = interpolant;
-            oldInterpolantIndex++;
-            if (oldInterpolantIndex > 3) {
-              oldInterpolantIndex = 0;
-            } */
 
           if (Forward) {
             B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, setWP(loopHead, loopHead, B[r], loopBody))));
@@ -387,7 +346,6 @@ namespace Microsoft.Boogie.InvariantInference {
             B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody))));
           }
           r++;
-          //}
         } else {
           if ((Forward && t <= concrete) || (!Forward && r <= concrete)) {
             Console.WriteLine("failed after " + iterations + " iterations");
@@ -619,7 +577,7 @@ namespace Microsoft.Boogie.InvariantInference {
           blockQ_In = VCExpressionGenerator.True;
         }
         foreach (Block successor in successors.labelTargets) {
-          if (blocks.Contains(successor)) {
+          if (blocks.Contains(successor) && currentBlock != successor) {
             if (blockWPs.ContainsKey(successor)) {
               blockQ_In = gen.AndSimp(blockWPs[successor], blockQ_In);
             } else {
@@ -676,7 +634,7 @@ namespace Microsoft.Boogie.InvariantInference {
           blockP_In = VCExpressionGenerator.True;
         }
         foreach (Block predecessor in currentBlock.Predecessors) {
-          if (blocks.Contains(predecessor)) {
+          if (blocks.Contains(predecessor) && currentBlock != predecessor) {
             if (blockSPs.ContainsKey(predecessor)) {
               blockP_In = gen.OrSimp(blockSPs[predecessor], blockP_In);
             } else {
