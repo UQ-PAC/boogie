@@ -1,3 +1,4 @@
+benchmark set,filename,result,iterations,abstract,concrete,size,time (seconds)
 code2inv,1,timeout,,,,,
 code2inv,10,success,3,2,1,19,0.31
 code2inv,100,success,4,3,1,173,0.381
