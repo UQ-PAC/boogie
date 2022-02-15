@@ -1,0 +1,31 @@
+
+
+procedure main() {
+  // variable declarations
+  var c:int;
+  var n:int;
+  
+  // pre-conditions
+  c := 0;
+  assume((n > 0));
+  // loop body
+  
+  while (*)
+  {
+      
+      if (*) {
+        if ( (c > n) )
+        {
+        c  :=  (c + 1);
+        }
+      } else {
+        if ( (c == n) )
+        {
+        c  :=  1;
+        }
+      }
+      
+  }
+  // post-condition
+  assert((c != n) ==> (c <= n) );
+}

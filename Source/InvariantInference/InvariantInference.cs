@@ -202,6 +202,8 @@ namespace Microsoft.Boogie.InvariantInference {
 
     }
     public VCExpr InferLoopInvariant() {
+      Stopwatch stopWatch = new Stopwatch();
+      stopWatch.Start();
 
       Block start = impl.Blocks[0];
       List<Block> ends = getEndBlocks();
@@ -242,8 +244,11 @@ namespace Microsoft.Boogie.InvariantInference {
       List<VCExpr> B = new List<VCExpr> { gen.AndSimp(NotK, gen.NotSimp(loopQElim)) }; //B_0 = !K && !Q
 
       bool Forward = CommandLineOptions.Clo.ForwardSqueeze;
+      CommandLineOptions.InterpolationDebug DebugLevel = CommandLineOptions.Clo.InterpolationDebugLevel;
       int t = 0;
       int r = 0;
+      int backtracks = 0;
+      int interpolantiterations = 0;
       int concrete = 0;
       int iterations = 0;
       bool doConcrete = false;
@@ -253,12 +258,12 @@ namespace Microsoft.Boogie.InvariantInference {
         VCExpr ADisjunct = listDisjunction(A);
         VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars);
 
-        if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+        if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
           Console.WriteLine("B: " + B_rElim);
           Console.Out.Flush();
         }
 
-        if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All || CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
+        if (DebugLevel == CommandLineOptions.InterpolationDebug.All || DebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
           int Asize = SizeComputingVisitor.ComputeSize(A[t]);
           int Bsize = SizeComputingVisitor.ComputeSize(B[r]);
           int ADsize = SizeComputingVisitor.ComputeSize(ADisjunct);
@@ -267,6 +272,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
 
         if (!doConcrete && !interpol.Satisfiable(B_rElim, ADisjunct)) {
+          interpolantiterations++;
           // adjust for forward
           SExpr resp = interpol.CalculateInterpolant(Forward);
           VCExpr I = resp.ToVC(gen, translator, scopeVars);
@@ -276,19 +282,17 @@ namespace Microsoft.Boogie.InvariantInference {
           } else {
             InvariantCandidate = gen.NotSimp(I);
           }
-          if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+          if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("invar candidate: " + InvariantCandidate.ToString());
             Console.Out.Flush();
           }
 
-          if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All
-            || CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
+          if (DebugLevel == CommandLineOptions.InterpolationDebug.All
+            || DebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
             int size = SizeComputingVisitor.ComputeSize(InvariantCandidate);
             Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
             Console.Out.Flush();
-          }
 
-          if (CommandLineOptions.Clo.InterpolationDebugLevel != CommandLineOptions.InterpolationDebug.None) {
             // extra checks to catch potential unsoundness in algorithm, only do when debug info enabled
             if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(InvariantCandidate, NotK), loopQ))) {
               Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
@@ -311,7 +315,18 @@ namespace Microsoft.Boogie.InvariantInference {
               throw new Exception("invariant is guard or weaker version of it, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
             */
-            Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
+            if (DebugLevel != CommandLineOptions.InterpolationDebug.Stats) {
+              Console.WriteLine("invariant found after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
+            }
+            stopWatch.Stop();
+            TimeSpan ts = stopWatch.Elapsed;
+            
+            if (DebugLevel == CommandLineOptions.InterpolationDebug.All || DebugLevel == CommandLineOptions.InterpolationDebug.Stats) {
+              String seconds = String.Format("{0:N3}", ts.TotalSeconds);
+              // success, iterations, abstract iterations, concrete iterations, invariant size, time taken in seconds
+              Console.WriteLine("success," + iterations + "," + interpolantiterations + "," + concrete + "," + SizeComputingVisitor.ComputeSize(InvariantCandidate) + "," + seconds);
+              Console.Out.Flush();
+            }
             return InvariantCandidate; // found invariant
           }
 
@@ -332,7 +347,7 @@ namespace Microsoft.Boogie.InvariantInference {
             AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
           }
           VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars);
-          if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+          if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("A: " + AElim);
             Console.Out.Flush();
           }
@@ -348,9 +363,22 @@ namespace Microsoft.Boogie.InvariantInference {
           r++;
         } else {
           if ((Forward && t <= concrete) || (!Forward && r <= concrete)) {
-            Console.WriteLine("failed after " + iterations + " iterations");
+            if (DebugLevel != CommandLineOptions.InterpolationDebug.Stats) {
+              Console.WriteLine("failed after " + iterations + " iterations");
+              Console.Out.Flush();
+            }
+            stopWatch.Stop();
+            TimeSpan ts = stopWatch.Elapsed;
+
+            if (DebugLevel == CommandLineOptions.InterpolationDebug.All || DebugLevel == CommandLineOptions.InterpolationDebug.Stats) {
+              String seconds = String.Format("{0:N3}", ts.TotalSeconds);
+              // success, iterations, abstract iterations, concrete iterations, invariant size, time taken in seconds
+              Console.WriteLine("failure," + iterations + "," + interpolantiterations + "," + concrete + ",," + seconds);
+              Console.Out.Flush();
+            }
             return VCExpressionGenerator.True; // fail to find invariant
           } else {
+            backtracks++; 
             if (Forward) {
               t = concrete;
               VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
@@ -368,6 +396,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
       }
       Console.WriteLine("gave up on finding invariant after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
+      stopWatch.Stop();
       return VCExpressionGenerator.True;
     }
 

@@ -813,7 +813,8 @@ namespace Microsoft.Boogie
     public enum InterpolationDebug {
       None,
       SizeOnly,
-      All
+      All,
+      Stats
     }
 
     public InterpolationDebug InterpolationDebugLevel { get; set; } = InterpolationDebug.None;
@@ -1065,7 +1066,7 @@ namespace Microsoft.Boogie
         case "interpolationDebug": 
           {
             int level = 0;
-            if (ps.GetNumericArgument(ref level, 3)) {
+            if (ps.GetNumericArgument(ref level, 4)) {
               switch (level) {
                 case 0:
                   InterpolationDebugLevel = InterpolationDebug.None;
@@ -1075,6 +1076,9 @@ namespace Microsoft.Boogie
                   break;
                 case 2:
                   InterpolationDebugLevel = InterpolationDebug.All;
+                  break;
+                case 3:
+                  InterpolationDebugLevel = InterpolationDebug.Stats;
                   break;
                 default: {
                     Contract.Assert(false);
@@ -2333,10 +2337,6 @@ namespace Microsoft.Boogie
 
   /interpolationLogAppend
                 Append (not overwrite) the specified prover log file
-
-  /forwardSqueeze
-               use forward squeezing algorithm instead of the default
-               backward algorithm
 
   ---- Debugging and general tracing options ---------------------------------
 

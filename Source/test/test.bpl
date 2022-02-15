@@ -12,5 +12,9 @@ procedure test() {
   assert (y == n);
 }
 
+
+//function increment(a:int) returns(int) { a + 1 }
+
+
 procedure increment(a: int) returns (b: int);
   ensures b == a + 1;
