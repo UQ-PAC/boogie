@@ -556,7 +556,7 @@ namespace Microsoft.Boogie.SMTLib
       FlushAxioms();
     }
 
-    public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars) {
+    public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps) {
       if (options.Solver != SolverKind.Z3) {
         throw new Exception("qe only supported in Z3");
       }
@@ -613,12 +613,12 @@ namespace Microsoft.Boogie.SMTLib
         }
       }
       if (goodOut.Count() > 1) {
-        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
+        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps);
       } else if (goodOut.Count() == 1) {
-        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
+        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps);
       } else if (goodOut.Count() == 0) {
         // empty goal returned - I think this should mean it simplified things to true?
-        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars);
+        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps);
       }
       throw new Exception("error in converting solver output from qe: " + resp.ToString());
     }

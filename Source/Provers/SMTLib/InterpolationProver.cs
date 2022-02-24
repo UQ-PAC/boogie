@@ -145,7 +145,7 @@ namespace Microsoft.Boogie.SMTLib {
 
     public MathSATOptions() {
       this.Solver = SolverKind.MATHSAT;
-      SolverArguments.Add("-input=smt2");
+      SolverArguments.Add("-input=smt2 -theory.bv.eager=false");
       ProverName = "mathsat";
     }
 

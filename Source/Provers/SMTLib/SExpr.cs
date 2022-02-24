@@ -345,7 +345,7 @@ namespace Microsoft.Boogie
     }
     */
 
-    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars) {
+    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps) {
       Stack<SExpr> todo = new Stack<SExpr>();
       Stack<SExpr> waiting = new Stack<SExpr>();
       Stack<VCExpr> results = new Stack<VCExpr>();
@@ -361,8 +361,11 @@ namespace Microsoft.Boogie
           }
         }
         waiting.Push(next);
-        foreach (SExpr arg in next.Arguments) {
-          todo.Push(arg);
+        // _ is a special case, used to parameterise functions and types
+        if (next.Name != "_") {
+          foreach (SExpr arg in next.Arguments) {
+            todo.Push(arg);
+          }
         }
       }
       while (waiting.Count > 0) {
@@ -420,6 +423,34 @@ namespace Microsoft.Boogie
           if (next.Name == "") {
             continue;
           }
+          // special symbol that indicates function/literal is being parameterised 
+          if (next.Name == "_") {
+            // bv literal shorthand function
+            if (next.Arguments[0].Name.StartsWith("bv")) {
+            BigNum bvValue;
+            if (BigNum.TryParse(next.Arguments[0].Name.Substring(2), out bvValue)) {
+              int bits;
+              if (Int32.TryParse(next.Arguments[1].Name, out bits)) {
+                results.Push(gen.Bitvector(new BvConst(bvValue, bits)));
+                continue;
+              }
+            }
+          }
+            /*
+          switch (next.Arguments[0].Name) {
+            // need to test how this actually looks to get args properly 
+            case "extract":
+              int start = Int32.Parse(next.Arguments[1].Name);
+              int end = Int32.Parse(next.Arguments[2].Name);
+              int bits = args[0].Type.BvBits;
+              results.Push(gen.BvExtract(args[0], bits, start, end));
+              continue;
+            default:
+              // others that might need to be handled:
+              // repeat, zero_extend, sign_extend, rotate_left, rotate_right
+              throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+            */
+          }
           if (letNames.Contains(next.Name)) {
             VCExpr e = results.Pop();
             VCExprVar bound = gen.Variable(next.Name, e.Type);
@@ -444,6 +475,24 @@ namespace Microsoft.Boogie
           }
           args.Reverse();
           VCExpr combinedArgs;
+
+          if (next.Name.StartsWith("bv")) {
+            // bv ops
+            int size = args[0].Type.BvBits;
+            Function bvFn;
+            if (bvOps.TryGetValue((next.Name, size), out bvFn)) {
+              if (args.Count == 1) {
+                combinedArgs = gen.Function(gen.BoogieFunctionOp(bvFn), args[0]);
+                results.Push(combinedArgs);
+                continue;
+              } else if (args.Count == 2) {
+                combinedArgs = gen.Function(gen.BoogieFunctionOp(bvFn), new List<VCExpr> { args[0], args[1] });
+                results.Push(combinedArgs);
+                continue;
+              }
+            }
+          }
+
           switch (next.Name) {
             case "and":
               combinedArgs = gen.AndSimp(args[0], args[1]);
@@ -560,6 +609,9 @@ namespace Microsoft.Boogie
               continue;
             case "to_real":
               results.Push(gen.Function(VCExpressionGenerator.ToRealOp, args));
+              continue;
+            case "concat":
+              results.Push(gen.BvConcat(args[0], args[1]));
               continue;
             default:
               throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);

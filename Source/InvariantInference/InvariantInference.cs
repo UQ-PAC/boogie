@@ -22,6 +22,17 @@ namespace Microsoft.Boogie.InvariantInference {
       InterpolationProver interpol = InterpolationProver.CreateProver(program, CommandLineOptions.Clo.InterpolationLogFilePath,
         CommandLineOptions.Clo.InterpolationLogFileAppend, CommandLineOptions.Clo.TimeLimit);
 
+      // get bv op functions
+
+      SortedDictionary<(string op, int size), Function> BitVectorOpFunctions = new SortedDictionary<(string, int), Function>();
+      foreach (Function f in program.Functions) {
+        if (f.Attributes.Key == "bvbuiltin") {
+          string op = (f.Attributes.Params[0] as string);
+          int size = f.InParams[0].TypedIdent.Type.BvBits;
+          BitVectorOpFunctions.Add((op, size), f);
+        }
+      } 
+
       // analyze each procedure
       foreach (var proc in program.Procedures) {
         if (procedureImplementations.ContainsKey(proc)) {
@@ -29,6 +40,7 @@ namespace Microsoft.Boogie.InvariantInference {
           foreach (var impl in procedureImplementations[proc]) {
             // find back edge & check only one back edge per procedure implementation
             bool backEdgeFound = false;
+
             // naive attempt at getting variables that may be referred to
             IEnumerable<Variable> scopeVars = new List<Variable>();
             scopeVars = scopeVars.Concat(program.GlobalVariables);
@@ -51,9 +63,9 @@ namespace Microsoft.Boogie.InvariantInference {
                 } else {
                   backEdgeFound = true;
 
-                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, scopeVars);
+                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, scopeVars, BitVectorOpFunctions);
                   VCExpr invariant = inferrer.InferLoopInvariant();
-                  Instrument(b, invariant, scopeVars);
+                  Instrument(b, invariant, scopeVars, BitVectorOpFunctions);
                 }
               }
             }
@@ -62,9 +74,9 @@ namespace Microsoft.Boogie.InvariantInference {
       }
     }
 
-    private static void Instrument(Block b, VCExpr invariant, IEnumerable<Variable> scopeVars) {
+    private static void Instrument(Block b, VCExpr invariant, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps) {
       // need to translate VCExpr back into Expr - kind of terrible
-      Expr inv = VCtoExpr(invariant, scopeVars);
+      Expr inv = VCtoExpr(invariant, scopeVars, bvOps);
       List<Cmd> newCommands = new List<Cmd>();
       PredicateCmd cmd;
       var kv = new QKeyValue(Token.NoToken, "inferred", new List<object>(), null);
@@ -77,7 +89,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
     // more robust would be to use visitor?
     // also need to take into account stack overflows potentially? 
-    private static Expr VCtoExpr(VCExpr vc, IEnumerable<Variable> scopeVars) {
+    private static Expr VCtoExpr(VCExpr vc, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps) {
       if (vc == VCExpressionGenerator.True) {
         return new LiteralExpr(Token.NoToken, true);
       } else if (vc == VCExpressionGenerator.False) {
@@ -90,17 +102,21 @@ namespace Microsoft.Boogie.InvariantInference {
         VCExprNAry nary = vc as VCExprNAry;
         VCExprOp op = nary.Op;
         if (nary.Arity == 1) {
-          Expr arg0 = VCtoExpr(nary[0], scopeVars);
+          Expr arg0 = VCtoExpr(nary[0], scopeVars, bvOps);
           if (op == VCExpressionGenerator.NotOp) {
             return Expr.Not(arg0);
           } else if (op == VCExpressionGenerator.ToIntOp) {
             return new NAryExpr(Token.NoToken, new ArithmeticCoercion(Token.NoToken, ArithmeticCoercion.CoercionType.ToInt), new List<Expr> { arg0 });
           } else if (op == VCExpressionGenerator.ToRealOp) {
             return new NAryExpr(Token.NoToken, new ArithmeticCoercion(Token.NoToken, ArithmeticCoercion.CoercionType.ToReal), new List<Expr> { arg0 });
+          } else if (op is VCExprBoogieFunctionOp) {
+            VCExprBoogieFunctionOp fnOp = op as VCExprBoogieFunctionOp;
+            Function fn = fnOp.Func;
+            return new NAryExpr(Token.NoToken, new FunctionCall(fn), new List<Expr> { arg0 });
           }
         } else if (nary.Arity == 2) {
-          Expr arg0 = VCtoExpr(nary[0], scopeVars);
-          Expr arg1 = VCtoExpr(nary[1], scopeVars);
+          Expr arg0 = VCtoExpr(nary[0], scopeVars, bvOps);
+          Expr arg1 = VCtoExpr(nary[1], scopeVars, bvOps);
           if (op == VCExpressionGenerator.AddIOp || op == VCExpressionGenerator.AddROp) {
             return Expr.Add(arg0, arg1);
           } else if (op == VCExpressionGenerator.SubIOp || op == VCExpressionGenerator.SubROp) {
@@ -129,11 +145,14 @@ namespace Microsoft.Boogie.InvariantInference {
             return Expr.Or(arg0, arg1);
           } else if (op == VCExpressionGenerator.ImpliesOp) {
             return Expr.Imp(arg0, arg1);
+          } else if (op is VCExprBoogieFunctionOp) {
+            VCExprBoogieFunctionOp fnOp = op as VCExprBoogieFunctionOp;
+            return new NAryExpr(Token.NoToken, new FunctionCall(fnOp.Func), new List<Expr> { arg0, arg1 });
           }
         } else if (nary.Arity == 3) {
-          Expr arg0 = VCtoExpr(nary[0], scopeVars);
-          Expr arg1 = VCtoExpr(nary[1], scopeVars);
-          Expr arg2 = VCtoExpr(nary[2], scopeVars);
+          Expr arg0 = VCtoExpr(nary[0], scopeVars, bvOps);
+          Expr arg1 = VCtoExpr(nary[1], scopeVars, bvOps);
+          Expr arg2 = VCtoExpr(nary[2], scopeVars, bvOps);
           if (op == VCExpressionGenerator.IfThenElseOp) {
             return new NAryExpr(Token.NoToken, new IfThenElse(Token.NoToken), new List<Expr> { arg0, arg1, arg2 });
           }
@@ -155,11 +174,11 @@ namespace Microsoft.Boogie.InvariantInference {
         for (int i = 0; i < vcLet.Count(); i++) {
           VCExprLetBinding binding = vcLet[i];
           dummies.Add(new BoundVariable(Token.NoToken, new TypedIdent(Token.NoToken, binding.V.Name, binding.V.Type)));
-          rhss.Add(VCtoExpr(binding.E, scopeVars));
+          rhss.Add(VCtoExpr(binding.E, scopeVars, bvOps));
         }
 
         IEnumerable<Variable> scopeVarsWithBound = scopeVars.Concat(dummies);
-        Expr body = VCtoExpr(vcLet.Body, scopeVarsWithBound);
+        Expr body = VCtoExpr(vcLet.Body, scopeVarsWithBound, bvOps);
 
         return new LetExpr(Token.NoToken, dummies, rhss, null, body);
       }
@@ -189,9 +208,10 @@ namespace Microsoft.Boogie.InvariantInference {
     private IEnumerable<Variable> scopeVars;
     private Implementation impl;
     private Block loopHead;
+    private SortedDictionary<(string op, int size), Function> bvOps;
 
     public InvariantInferrer(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
-      ProverInterface prover, InterpolationProver interpol, IEnumerable<Variable> scopeVars) {
+      ProverInterface prover, InterpolationProver interpol, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps) {
       this.translator = prover.Context.BoogieExprTranslator;
       this.gen = prover.Context.ExprGen;
       this.scopeVars = scopeVars;
@@ -199,6 +219,7 @@ namespace Microsoft.Boogie.InvariantInference {
       this.impl = impl;
       this.loopHead = loopHead;
       this.interpol = interpol;
+      this.bvOps = bvOps;
 
     }
     public VCExpr InferLoopInvariant() {
@@ -214,8 +235,8 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpr loopP = getLoopPreCondition(requires, start);
       VCExpr loopQ = getLoopPostCondition(ensures, ends);
 
-      VCExpr loopPElim = prover.EliminateQuantifiers(loopP, scopeVars);
-      VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars);
+      VCExpr loopPElim = prover.EliminateQuantifiers(loopP, scopeVars, bvOps);
+      VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars, bvOps);
 
       // probably can improve this
       List<List<Block>> loopPaths = new List<List<Block>>();
@@ -256,7 +277,7 @@ namespace Microsoft.Boogie.InvariantInference {
         iterations++;
 
         VCExpr ADisjunct = listDisjunction(A);
-        VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars);
+        VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars, bvOps);
 
         if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
           Console.WriteLine("B: " + B_rElim);
@@ -275,7 +296,7 @@ namespace Microsoft.Boogie.InvariantInference {
           interpolantiterations++;
           // adjust for forward
           SExpr resp = interpol.CalculateInterpolant(Forward);
-          VCExpr I = resp.ToVC(gen, translator, scopeVars);
+          VCExpr I = resp.ToVC(gen, translator, scopeVars, bvOps);
           VCExpr InvariantCandidate;
           if (Forward) {
             InvariantCandidate = I;
@@ -346,7 +367,7 @@ namespace Microsoft.Boogie.InvariantInference {
           } else {
             AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
           }
-          VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars);
+          VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps);
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("A: " + AElim);
             Console.Out.Flush();
@@ -382,7 +403,7 @@ namespace Microsoft.Boogie.InvariantInference {
             if (Forward) {
               t = concrete;
               VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
-              VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars);
+              VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps);
               A.Insert(t + 1, AElim);
               t++;
             } else {
