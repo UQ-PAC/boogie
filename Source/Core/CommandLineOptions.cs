@@ -826,6 +826,8 @@ namespace Microsoft.Boogie
 
     public QETactic InterpolationQETactic { get; set; } = QETactic.qe;
 
+    public int InterpolationBVMode = 0;
+
     public bool ForwardSqueeze = false;
 
     public string CivlDesugaredFile  { get; set; } = null;
@@ -1039,8 +1041,7 @@ namespace Microsoft.Boogie
     protected override bool ParseOption(string name, CommandLineOptionEngine.CommandLineParseState ps)
     {
       var args = ps.args; // convenient synonym
-      switch (name)
-      {
+      switch (name) {
         case "inferInterpolant":
           if (ps.args.Length == 0) {
             InterpolantSolverKind = InterpolantSolver.MathSAT;
@@ -1063,53 +1064,57 @@ namespace Microsoft.Boogie
 
           return true;
 
-        case "interpolationDebug": 
-          {
-            int level = 0;
-            if (ps.GetNumericArgument(ref level, 4)) {
-              switch (level) {
-                case 0:
-                  InterpolationDebugLevel = InterpolationDebug.None;
-                  break;
-                case 1:
-                  InterpolationDebugLevel = InterpolationDebug.SizeOnly;
-                  break;
-                case 2:
-                  InterpolationDebugLevel = InterpolationDebug.All;
-                  break;
-                case 3:
-                  InterpolationDebugLevel = InterpolationDebug.Stats;
-                  break;
-                default: {
-                    Contract.Assert(false);
-                    throw new cce.UnreachableException();
-                  } 
-              }
+        case "interpolationDebug":
+          int level = 0;
+          if (ps.GetNumericArgument(ref level, 4)) {
+            switch (level) {
+              case 0:
+                InterpolationDebugLevel = InterpolationDebug.None;
+                break;
+              case 1:
+                InterpolationDebugLevel = InterpolationDebug.SizeOnly;
+                break;
+              case 2:
+                InterpolationDebugLevel = InterpolationDebug.All;
+                break;
+              case 3:
+                InterpolationDebugLevel = InterpolationDebug.Stats;
+                break;
+              default: {
+                  Contract.Assert(false);
+                  throw new cce.UnreachableException();
+                }
             }
-
-            return true;
           }
+          return true;
 
-        case "interpolationQE": {
-            if (ps.ConfirmArgumentCount(1)) {
-              switch (args[ps.i]) {
-                case "qe":
-                  InterpolationQETactic = QETactic.qe;
-                  break;
-                case "qe2":
-                  InterpolationQETactic = QETactic.qe2;
-                  break;
-                case "qe_rec":
-                  InterpolationQETactic = QETactic.qe_rec;
-                  break;
-                default:
-                  ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);
-                  break;
-              }
+
+        case "interpolationQE":
+          if (ps.ConfirmArgumentCount(1)) {
+            switch (args[ps.i]) {
+              case "qe":
+                InterpolationQETactic = QETactic.qe;
+                break;
+              case "qe2":
+                InterpolationQETactic = QETactic.qe2;
+                break;
+              case "qe_rec":
+                InterpolationQETactic = QETactic.qe_rec;
+                break;
+              default:
+                ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);
+                break;
             }
-
-            return true;
           }
+          return true;
+
+        case "interpolationBVMode":
+          if (ps.ConfirmArgumentCount(1)) {
+            if (!ps.GetNumericArgument(ref InterpolationBVMode, 5)) {
+              ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);
+            }
+          }
+          return true;
 
         case "infer":
           if (ps.ConfirmArgumentCount(1))
@@ -2337,6 +2342,15 @@ namespace Microsoft.Boogie
 
   /interpolationLogAppend
                 Append (not overwrite) the specified prover log file
+
+  /interpolationBVMode:<n>
+                Interpolation technique to use for bit-vectors. Possible values are:
+                0 - equality substitution + LA(Z) encoding  + bit-level interpolation
+                1 - LA(Z) encoding + bit-level interpolation
+                2 - bit-level interpolation only
+                3 - LA(Z) encoding + equality substitution + bit-level
+                interpolation
+                4 - equality substitution + bit-level interpolation.
 
   ---- Debugging and general tracing options ---------------------------------
 

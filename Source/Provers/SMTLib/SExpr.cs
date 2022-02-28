@@ -364,7 +364,9 @@ namespace Microsoft.Boogie
         // _ is a special case, used to parameterise functions and types
         if (next.Name != "_") {
           foreach (SExpr arg in next.Arguments) {
-            todo.Push(arg);
+            if (!(next.Name == "" && arg.Name == "_")) {
+              todo.Push(arg);
+            }
           }
         }
       }
@@ -421,35 +423,45 @@ namespace Microsoft.Boogie
           }
         } else {
           if (next.Name == "") {
+            if (next.Arguments[0].Name == "_") {
+              SExpr BVOp = next.Arguments[0];
+              if (BVOp.ArgCount > 0) {
+                List<VCExpr> BVOpArgs = new List<VCExpr>();
+                for (int i = 1; i < next.ArgCount; i++) {
+                  BVOpArgs.Add(results.Pop());
+                }
+                BVOpArgs.Reverse();
+                switch (BVOp.Arguments[0].Name) {
+                  case "extract":
+                    int end = Int32.Parse(BVOp.Arguments[1].Name) + 1;
+                    int start = Int32.Parse(BVOp.Arguments[2].Name);
+                    int bits = BVOpArgs[0].Type.BvBits;
+                    results.Push(gen.BvExtract(BVOpArgs[0], bits, start, end));
+                    continue;
+                  default:
+                    // others that might need to be handled:
+                    // repeat, zero_extend, sign_extend, rotate_left, rotate_right
+                    throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+                }
+              } else {
+                throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+              }
+            }
             continue;
           }
           // special symbol that indicates function/literal is being parameterised 
           if (next.Name == "_") {
             // bv literal shorthand function
             if (next.Arguments[0].Name.StartsWith("bv")) {
-            BigNum bvValue;
-            if (BigNum.TryParse(next.Arguments[0].Name.Substring(2), out bvValue)) {
-              int bits;
-              if (Int32.TryParse(next.Arguments[1].Name, out bits)) {
-                results.Push(gen.Bitvector(new BvConst(bvValue, bits)));
-                continue;
+              BigNum bvValue;
+              if (BigNum.TryParse(next.Arguments[0].Name.Substring(2), out bvValue)) {
+                int bits;
+                if (Int32.TryParse(next.Arguments[1].Name, out bits)) {
+                  results.Push(gen.Bitvector(new BvConst(bvValue, bits)));
+                  continue;
+                }
               }
             }
-          }
-            /*
-          switch (next.Arguments[0].Name) {
-            // need to test how this actually looks to get args properly 
-            case "extract":
-              int start = Int32.Parse(next.Arguments[1].Name);
-              int end = Int32.Parse(next.Arguments[2].Name);
-              int bits = args[0].Type.BvBits;
-              results.Push(gen.BvExtract(args[0], bits, start, end));
-              continue;
-            default:
-              // others that might need to be handled:
-              // repeat, zero_extend, sign_extend, rotate_left, rotate_right
-              throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
-            */
           }
           if (letNames.Contains(next.Name)) {
             VCExpr e = results.Pop();
@@ -481,15 +493,57 @@ namespace Microsoft.Boogie
             int size = args[0].Type.BvBits;
             Function bvFn;
             if (bvOps.TryGetValue((next.Name, size), out bvFn)) {
-              if (args.Count == 1) {
-                combinedArgs = gen.Function(gen.BoogieFunctionOp(bvFn), args[0]);
-                results.Push(combinedArgs);
-                continue;
-              } else if (args.Count == 2) {
-                combinedArgs = gen.Function(gen.BoogieFunctionOp(bvFn), new List<VCExpr> { args[0], args[1] });
-                results.Push(combinedArgs);
-                continue;
+              combinedArgs = gen.Function(gen.BoogieFunctionOp(bvFn), args);
+              results.Push(combinedArgs);
+              continue;
+            } else {
+              List<Variable> inParams = new List<Variable>();
+              foreach (VCExpr arg in args) {
+                inParams.Add(new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", arg.Type), true));
               }
+              Variable result;
+              // can't see a better way to do this at the moment, don't think this is all bv operators though
+              switch (next.Name) {
+                case "bvadd":
+                case "bvsub":
+                case "bvmul":
+                case "bvudiv":
+                case "bvurem":
+                case "bvsdiv":
+                case "bvsrem":
+                case "bvsmod":
+                case "bvneg":
+                case "bvand":
+                case "bvor":
+                case "bvnot":
+                case "bvxor":
+                case "bvnand":
+                case "bvnor":
+                case "bvxnor":
+                case "bvshl":
+                case "bvlshr":
+                case "bvashr":
+                  result = new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", args[0].Type), false);
+                  break;
+                case "bvult":
+                case "bvule":
+                case "bvugt":
+                case "bvuge":
+                case "bvslt":
+                case "bvsle":
+                case "bvsgt":
+                case "bvsge":
+                  result = new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", Type.Bool), false);
+                  break;
+                default:
+                  throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+              }
+              bvFn = new Function(Token.NoToken, "__" + next.Name + size, inParams, result);
+              bvFn.Attributes = new QKeyValue(Token.NoToken, "bvbuiltin", new List<Object> { next.Name }, null);
+              bvOps.Add((next.Name, size), bvFn);
+              combinedArgs = gen.Function(gen.BoogieFunctionOp(bvFn), args);
+              results.Push(combinedArgs);
+              continue;
             }
           }
 

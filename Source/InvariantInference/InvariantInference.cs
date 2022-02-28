@@ -102,6 +102,10 @@ namespace Microsoft.Boogie.InvariantInference {
         VCExprNAry nary = vc as VCExprNAry;
         VCExprOp op = nary.Op;
         if (nary.Arity == 1) {
+          if (op is VCExprBvOp) {
+            return new LiteralExpr(Token.NoToken, ((VCExprIntLit)nary[0]).Val, ((VCExprBvOp)op).Bits);
+          }
+
           Expr arg0 = VCtoExpr(nary[0], scopeVars, bvOps);
           if (op == VCExpressionGenerator.NotOp) {
             return Expr.Not(arg0);
@@ -113,7 +117,10 @@ namespace Microsoft.Boogie.InvariantInference {
             VCExprBoogieFunctionOp fnOp = op as VCExprBoogieFunctionOp;
             Function fn = fnOp.Func;
             return new NAryExpr(Token.NoToken, new FunctionCall(fn), new List<Expr> { arg0 });
-          }
+          } else if (op is VCExprBvExtractOp) {
+            VCExprBvExtractOp extractOp = op as VCExprBvExtractOp;
+            return new BvExtractExpr(Token.NoToken, arg0, extractOp.End, extractOp.Start);
+           }
         } else if (nary.Arity == 2) {
           Expr arg0 = VCtoExpr(nary[0], scopeVars, bvOps);
           Expr arg1 = VCtoExpr(nary[1], scopeVars, bvOps);
@@ -148,7 +155,7 @@ namespace Microsoft.Boogie.InvariantInference {
           } else if (op is VCExprBoogieFunctionOp) {
             VCExprBoogieFunctionOp fnOp = op as VCExprBoogieFunctionOp;
             return new NAryExpr(Token.NoToken, new FunctionCall(fnOp.Func), new List<Expr> { arg0, arg1 });
-          }
+          } 
         } else if (nary.Arity == 3) {
           Expr arg0 = VCtoExpr(nary[0], scopeVars, bvOps);
           Expr arg1 = VCtoExpr(nary[1], scopeVars, bvOps);
