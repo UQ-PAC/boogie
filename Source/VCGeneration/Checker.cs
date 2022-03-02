@@ -530,7 +530,7 @@ namespace Microsoft.Boogie
 
     public abstract Outcome CheckOutcomeBasic();
 
-    public abstract VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps);
+    public abstract VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions);
 
     public virtual string[] CalculatePath(int controlFlowConstant)
     {
@@ -723,7 +723,7 @@ namespace Microsoft.Boogie
       throw new NotImplementedException();
     }
 
-    public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps) {
+    public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
       Contract.EnsuresOnThrow<UnexpectedProverOutputException>(true);
       throw new NotImplementedException();
     }

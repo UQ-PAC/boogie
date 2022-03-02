@@ -345,7 +345,7 @@ namespace Microsoft.Boogie
     }
     */
 
-    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps) {
+    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps, List<Function> newBVFunctions) {
       Stack<SExpr> todo = new Stack<SExpr>();
       Stack<SExpr> waiting = new Stack<SExpr>();
       Stack<VCExpr> results = new Stack<VCExpr>();
@@ -541,6 +541,7 @@ namespace Microsoft.Boogie
               bvFn = new Function(Token.NoToken, "__" + next.Name + size, inParams, result);
               bvFn.Attributes = new QKeyValue(Token.NoToken, "bvbuiltin", new List<Object> { next.Name }, null);
               bvOps.Add((next.Name, size), bvFn);
+              newBVFunctions.Add(bvFn);
               combinedArgs = gen.Function(gen.BoogieFunctionOp(bvFn), args);
               results.Push(combinedArgs);
               continue;
