@@ -14,10 +14,22 @@ namespace Microsoft.Boogie.SMTLib {
 
     public static InterpolationProver CreateProver(Program prog, string /*?*/ logFilePath, bool appendLogFile, uint timeout) {
       ProverOptions options;
-      if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.MathSAT) {
-        options = new MathSATOptions();
-      } else {
-        options = new SMTInterpolOptions();
+
+      switch (CommandLineOptions.Clo.InterpolantSolverKind) {
+        case CommandLineOptions.InterpolantSolver.MathSAT:
+          options = new MathSATOptions();
+          break;
+        case CommandLineOptions.InterpolantSolver.SMTInterpol:
+          options = new SMTInterpolOptions();
+          break;
+        case CommandLineOptions.InterpolantSolver.Princess:
+          options = new PrincessOptions();
+          break;
+        case CommandLineOptions.InterpolantSolver.CVC5:
+          options = new CVC5Options();
+          break;
+        default:
+          throw new cce.UnreachableException();
       }
 
       if (logFilePath != null) {
@@ -75,8 +87,26 @@ namespace Microsoft.Boogie.SMTLib {
 
       return new InterpolationProver(libOptions, options, ctx.ExprGen, ctx);
     }
+    public void InterpolationSetup(string descriptiveName, VCExpr A, VCExpr B, out string AStr, out string BStr) {
+      if (options.SeparateLogFiles) {
+        CloseLogFile(); // shouldn't really happen
+      }
 
-    public bool Satisfiable(VCExpr A, VCExpr B) {
+      if (options.LogFilename != null && currentLogFile == null) {
+        currentLogFile = OpenOutputFile(descriptiveName);
+        currentLogFile.Write(common.ToString());
+      }
+
+      PrepareCommon();
+      FlushAndCacheCommons();
+      AStr = VCExpr2String(A, 1);
+      BStr = VCExpr2String(B, 1);
+      FlushAxioms();
+    }
+
+    // returns false if A && B is satisfiable meaning interpolant can't be found
+    // returns true and sets resp to be output from smt solver if interpolant is found
+    public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out SExpr resp) {
       string AStr;
       string BStr;
       InterpolationSetup("interpolant", A, B, out AStr, out BStr);
@@ -94,26 +124,35 @@ namespace Microsoft.Boogie.SMTLib {
       } else if (options.Solver == SolverKind.SMTINTERPOL) {
         SendThisVC("(assert (! " + AStr + " :named g1))");
         SendThisVC("(assert (! " + BStr + " :named g2))");
+      } else if (options.Solver == SolverKind.PRINCESS) {
+        SendThisVC("(assert " + AStr + ")");
+        SendThisVC("(assert " + BStr + ")");
+      } else if (options.Solver == SolverKind.CVC5) {
+        SendThisVC("(assert " + AStr + ")");
+        SendThisVC("(push 1)");
+        SendThisVC("(assert " + BStr + ")");
       }
       // need to check sat before requesting interpolant
       SendCheckSat();
-      SExpr resp = Process.GetProverResponse();
-      Debug.Print(resp.ToString());
+      SExpr satResp = Process.GetProverResponse();
+      Debug.Print(satResp.ToString());
 
-      if (resp.Name == "sat") {
+      if (options.Solver == SolverKind.CVC5) {
         SendThisVC("(pop 1)");
-        FlushLogFile();
-        return true;
-      } else if (resp.Name != "unsat") {
-        SendThisVC("(pop 1)");
-        FlushLogFile();
-        throw new ProverException("unexpected prover response " + resp);
       }
-      return false;
-    }
 
-    // must have called Satisfiable first
-    public SExpr CalculateInterpolant(bool Forward) {
+      if (satResp.Name == "sat") {
+        SendThisVC("(pop 1)");
+        FlushLogFile();
+        resp = null;
+        return false;
+      } else if (satResp.Name != "unsat") {
+        SendThisVC("(pop 1)");
+        FlushLogFile();
+        throw new ProverException("unexpected prover response " + satResp);
+      }
+
+      // A && B is unsat, find interpolant
       if (options.Solver == SolverKind.MATHSAT) {
         if (Forward) {
           SendThisVC("(get-interpolant (g2))");
@@ -123,20 +162,28 @@ namespace Microsoft.Boogie.SMTLib {
       } else if (options.Solver == SolverKind.SMTINTERPOL) {
         if (Forward) {
           SendThisVC("(get-interpolants g2 g1)");
-        }
-        else {
+        } else {
           SendThisVC("(get-interpolants g1 g2)");
         }
+      } else if (options.Solver == SolverKind.CVC5) {
+        // unlike other provers, CVC5 does not compute reverse interpolants as its default interpolation procedure so must negate B to get desired result
+        SendThisVC("(get-interpol g1 (not" + BStr + "))");
+      } else if (options.Solver == SolverKind.PRINCESS) {
+        SendThisVC("(get-interpolants)");
       }
 
-      SExpr resp = Process.GetProverResponse();
+      resp = Process.GetProverResponse();
       //Console.WriteLine("interpolant: " + resp.ToString());
-      SendThisVC("(pop 1)"); 
+      if (options.Solver == SolverKind.CVC5) {
+        // CVC5 adds extraneous function definition stuff like this
+        resp = resp.Arguments[3];
+      }
+      SendThisVC("(pop 1)");
       FlushLogFile();
 
       //Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
       //return SExpr.ResolveLet(resp, letDefs);
-      return resp;
+      return true;
     }
 
   }
@@ -157,11 +204,35 @@ namespace Microsoft.Boogie.SMTLib {
     public SMTInterpolOptions() {
       this.Solver = SolverKind.SMTINTERPOL;
       SolverArguments.Add("-q");
-      ProverName = "smtinterpol";
+      ProverName = "smtinterpol.jar";
       Logic = "QF_UFLIRA";
     }
 
   }
 
+  public class CVC5Options : SMTLibProverOptions {
+    public CVC5Options() {
+      this.Solver = SolverKind.CVC5;
+      SolverArguments.Add("--produce-interpols=default");
+      SolverArguments.Add("--incremental");
+      ProverName = "cvc5";
+      Logic = "ALL";
+    }
+
+  }
+
+  public class PrincessOptions : SMTLibProverOptions {
+    public PrincessOptions() {
+      this.Solver = SolverKind.PRINCESS;
+      ProverName = "princess-all.jar";
+      SolverArguments.Add("ap.CmdlMain");
+      SolverArguments.Add("-logo");
+      SolverArguments.Add("+quiet");
+      SolverArguments.Add("+stdin");
+      SolverArguments.Add("+incremental");
+      SolverArguments.Add("+elimInterpolantQuants");
+    }
+
+  }
 }
 

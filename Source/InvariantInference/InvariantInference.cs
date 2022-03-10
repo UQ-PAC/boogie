@@ -22,6 +22,11 @@ namespace Microsoft.Boogie.InvariantInference {
       InterpolationProver interpol = InterpolationProver.CreateProver(program, CommandLineOptions.Clo.InterpolationLogFilePath,
         CommandLineOptions.Clo.InterpolationLogFileAppend, CommandLineOptions.Clo.TimeLimit);
 
+      /*
+      if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
+        prover = interpol;
+      }
+      */
       // get bv op functions
 
       SortedDictionary<(string op, int size), Function> BitVectorOpFunctions = new SortedDictionary<(string, int), Function>();
@@ -249,8 +254,18 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpr loopP = getLoopPreCondition(requires, start);
       VCExpr loopQ = getLoopPostCondition(ensures, ends);
 
-      VCExpr loopPElim = prover.EliminateQuantifiers(loopP, scopeVars, bvOps, newBVFunctions);
-      VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars, bvOps, newBVFunctions);
+
+      VCExpr loopPElim = loopPElim = prover.EliminateQuantifiers(loopP, scopeVars, bvOps, newBVFunctions);
+      VCExpr loopQElim = loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars, bvOps, newBVFunctions);
+      /*
+      VCExpr loopPElim = loopP;
+      VCExpr loopQElim = loopQ;
+
+      if (CommandLineOptions.Clo.InterpolantSolverKind != CommandLineOptions.InterpolantSolver.Princess) {
+        loopPElim = prover.EliminateQuantifiers(loopP, scopeVars, bvOps, newBVFunctions);
+        loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars, bvOps, newBVFunctions);
+      }
+      */
 
       // probably can improve this
       List<List<Block>> loopPaths = new List<List<Block>>();
@@ -291,7 +306,10 @@ namespace Microsoft.Boogie.InvariantInference {
         iterations++;
 
         VCExpr ADisjunct = listDisjunction(A);
-        VCExpr B_rElim = prover.EliminateQuantifiers(B[r], scopeVars, bvOps, newBVFunctions);
+        VCExpr B_rElim = B[r];
+        //if (CommandLineOptions.Clo.InterpolantSolverKind != CommandLineOptions.InterpolantSolver.Princess) {
+          B_rElim = prover.EliminateQuantifiers(B[r], scopeVars, bvOps, newBVFunctions);
+        //}
 
         if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
           Console.WriteLine("B: " + B_rElim);
@@ -306,10 +324,9 @@ namespace Microsoft.Boogie.InvariantInference {
           Console.Out.Flush();
         }
 
-        if (!doConcrete && !interpol.Satisfiable(B_rElim, ADisjunct)) {
+        SExpr resp;
+        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out resp)) { 
           interpolantiterations++;
-          // adjust for forward
-          SExpr resp = interpol.CalculateInterpolant(Forward);
           VCExpr I = resp.ToVC(gen, translator, scopeVars, bvOps, newBVFunctions);
           VCExpr InvariantCandidate;
           if (Forward) {
@@ -381,7 +398,12 @@ namespace Microsoft.Boogie.InvariantInference {
           } else {
             AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
           }
-          VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+          VCExpr AElim;
+          //if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
+         //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+         // } else {
+            AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+         // }
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("A: " + AElim);
             Console.Out.Flush();
@@ -417,7 +439,13 @@ namespace Microsoft.Boogie.InvariantInference {
             if (Forward) {
               t = concrete;
               VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
-              VCExpr AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+              VCExpr AElim;
+             // if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
+             //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+            //  } else {
+                AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+           //   }
+
               A.Insert(t + 1, AElim);
               t++;
             } else {

@@ -168,7 +168,7 @@ namespace Microsoft.Boogie.SMTLib
     protected SMTLibProcess Process;
     readonly List<string> proverErrors = new List<string>();
     readonly List<string> proverWarnings = new List<string>();
-    StringBuilder common = new StringBuilder();
+    protected StringBuilder common = new StringBuilder();
     private string CachedCommon = null;
     protected TextWriter currentLogFile;
     protected volatile ErrorHandler currentErrorHandler;
@@ -397,14 +397,17 @@ namespace Microsoft.Boogie.SMTLib
       generatedFuncDefs.Iter(SendCommon); // Flush function definitions
     }
 
-    private void PrepareCommon()
+    protected void PrepareCommon()
     {
       if (common.Length == 0)
       {
         SendCommon("(set-option :print-success false)");
         SendCommon("(set-info :smt-lib-version 2.6)");
-        if (options.Solver == SolverKind.MATHSAT || options.Solver == SolverKind.SMTINTERPOL) {
+        if (options.Solver == SolverKind.MATHSAT || options.Solver == SolverKind.SMTINTERPOL || options.Solver == SolverKind.PRINCESS) {
           SendCommon("(set-option :produce-interpolants true)");
+        }
+        if (options.Solver == SolverKind.PRINCESS) {
+          SendCommon("(set-option :inline-size-limit 20000000)");
         }
 
         if (libOptions.ProduceModel)
@@ -486,7 +489,7 @@ namespace Microsoft.Boogie.SMTLib
       return 0;
     }
 
-    private void FlushAndCacheCommons()
+    protected void FlushAndCacheCommons()
     {
       FlushAxioms();
       if (CachedCommon == null)
@@ -495,7 +498,7 @@ namespace Microsoft.Boogie.SMTLib
       }
     }
 
-    private void FlushAxioms()
+    protected void FlushAxioms()
     {
       TypeDecls.Iter(SendCommon);
       TypeDecls.Clear();
@@ -512,7 +515,7 @@ namespace Microsoft.Boogie.SMTLib
       //FlushPushedAssertions();
     }
 
-    private void CloseLogFile()
+    protected void CloseLogFile()
     {
       if (currentLogFile != null)
       {
@@ -539,27 +542,11 @@ namespace Microsoft.Boogie.SMTLib
       }
     }
 
-    public void InterpolationSetup(string descriptiveName, VCExpr A, VCExpr B, out string AStr, out string BStr) {
-      if (options.SeparateLogFiles) {
-        CloseLogFile(); // shouldn't really happen
-      }
-
-      if (options.LogFilename != null && currentLogFile == null) {
-        currentLogFile = OpenOutputFile(descriptiveName);
-        currentLogFile.Write(common.ToString());
-      }
-
-      PrepareCommon();
-      FlushAndCacheCommons();
-      AStr = VCExpr2String(A, 1);
-      BStr = VCExpr2String(B, 1);
-      FlushAxioms();
-    }
-
     public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+      /*
       if (options.Solver != SolverKind.Z3) {
         throw new Exception("qe only supported in Z3");
-      }
+      } */
       if (options.SeparateLogFiles) {
         CloseLogFile(); // shouldn't really happen
       }
@@ -577,15 +564,21 @@ namespace Microsoft.Boogie.SMTLib
       if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
         return predicate; 
       }
-      SendThisVC("(push 1)");
-      SendThisVC("(assert " + SMTPred + ")");
-      FlushLogFile();
-      if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe) {
-        SendThisVC("(apply qe)");
-      } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe2) {
-        SendThisVC("(apply qe2)");
-      } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe_rec) {
-        SendThisVC("(apply qe_rec)");
+
+      if (options.Solver == SolverKind.Z3) {
+        SendThisVC("(push 1)");
+        SendThisVC("(assert " + SMTPred + ")");
+        FlushLogFile();
+        if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe) {
+          SendThisVC("(apply qe)");
+        } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe2) {
+          SendThisVC("(apply qe2)");
+        } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe_rec) {
+          SendThisVC("(apply qe_rec)");
+        }
+      } else if (options.Solver == SolverKind.PRINCESS) {
+        SendThisVC("(push 1)");
+        SendThisVC("(simplify" + SMTPred + ")");
       }
 
       var resp = Process.GetProverResponse();
@@ -594,32 +587,37 @@ namespace Microsoft.Boogie.SMTLib
       FlushLogFile();
       SendThisVC("(pop 1)"); 
       List<SExpr> goodOut = new List<SExpr>();
-
-      if (resp.Name == "goals") {
-        // assume only single goal for now
-        if (resp.ArgCount != 1) {
-          throw new NotImplementedException("quantifier elimination goals != 1");
-        }
-        var goal = resp.Arguments[0];
-        if (goal.Name == "goal") {
-          foreach (SExpr arg in goal.Arguments) {
-            if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
-              // remove extraneous output such as ticklebool & precision info
-              goodOut.Add(arg);
-            } else if (arg.Name == "true" || arg.Name == "false") {
-              goodOut.Add(arg);
+      if (options.Solver == SolverKind.Z3) {
+        if (resp.Name == "goals") {
+          // assume only single goal for now
+          if (resp.ArgCount != 1) {
+            throw new NotImplementedException("quantifier elimination goals != 1");
+          }
+          var goal = resp.Arguments[0];
+          if (goal.Name == "goal") {
+            foreach (SExpr arg in goal.Arguments) {
+              if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
+                // remove extraneous output such as ticklebool & precision info
+                goodOut.Add(arg);
+              } else if (arg.Name == "true" || arg.Name == "false") {
+                goodOut.Add(arg);
+              }
             }
           }
         }
+        if (goodOut.Count() > 1) {
+          return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        } else if (goodOut.Count() == 1) {
+          return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        } else if (goodOut.Count() == 0) {
+          // empty goal returned - I think this should mean it simplified things to true?
+          return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        }
+
+      } else if (options.Solver == SolverKind.PRINCESS) {
+        return resp.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
       }
-      if (goodOut.Count() > 1) {
-        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
-      } else if (goodOut.Count() == 1) {
-        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
-      } else if (goodOut.Count() == 0) {
-        // empty goal returned - I think this should mean it simplified things to true?
-        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
-      }
+
       throw new Exception("error in converting solver output from qe: " + resp.ToString());
     }
 
@@ -775,7 +773,7 @@ namespace Microsoft.Boogie.SMTLib
 
     private static HashSet<string> usedLogNames = new HashSet<string>();
 
-    private TextWriter OpenOutputFile(string descriptiveName)
+    protected TextWriter OpenOutputFile(string descriptiveName)
     {
       Contract.Requires(descriptiveName != null);
       Contract.Ensures(Contract.Result<TextWriter>() != null);

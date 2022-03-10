@@ -805,7 +805,9 @@ namespace Microsoft.Boogie
 
     public enum InterpolantSolver {
       MathSAT,
-      SMTInterpol
+      SMTInterpol,
+      Princess,
+      CVC5
     }
 
     public InterpolantSolver InterpolantSolverKind { get; set; } = InterpolantSolver.MathSAT;
@@ -1049,12 +1051,18 @@ namespace Microsoft.Boogie
 
           } else if (ps.ConfirmArgumentCount(1)) {
             InferInvariantsInterpolant = true;
-            switch (args[ps.i]) {
+            switch (args[ps.i].ToLower()) {
               case "smtinterpol":
                 InterpolantSolverKind = InterpolantSolver.SMTInterpol;
                 break;
               case "mathsat":
                 InterpolantSolverKind = InterpolantSolver.MathSAT;
+                break;
+              case "cvc5":
+                InterpolantSolverKind = InterpolantSolver.CVC5;
+                break;
+              case "princess":
+                InterpolantSolverKind = InterpolantSolver.Princess;
                 break;
               default:
                 ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);

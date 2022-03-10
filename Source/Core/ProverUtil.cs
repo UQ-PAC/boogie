@@ -138,7 +138,11 @@ The generic options may or may not be used by the prover plugin.
         return ConfirmProverPath(ProverPath);
       }
 
-      var exes = new string[] {ProverName, ProverName + ".exe"};
+      var exes = new List<String>{ ProverName };
+
+      if (!ProverName.EndsWith(".jar")) {
+        exes.Add(ProverName + ".exe");
+      }
 
       // Otherwise we look in the executable directory
       foreach (var exe in exes)
@@ -147,13 +151,6 @@ The generic options may or may not be used by the prover plugin.
 
         if (File.Exists(tryProverPath))
         {
-          return ConfirmProverPath(tryProverPath);
-        }
-      }
-
-      if (ProverName == "smtinterpol") {
-        var tryProverPath = Path.Combine(CodebaseString(), "smtinterpol.jar");
-        if (File.Exists(tryProverPath)) {
           return ConfirmProverPath(tryProverPath);
         }
       }
@@ -167,12 +164,6 @@ The generic options may or may not be used by the prover plugin.
           var tryProverPath = Path.Combine(exePath, exe);
           if (File.Exists(tryProverPath))
           {
-            return ConfirmProverPath(tryProverPath);
-          }
-        }
-        if (ProverName == "smtinterpol") {
-          var tryProverPath = Path.Combine(exePath, "smtinterpol.jar");
-          if (File.Exists(tryProverPath)) {
             return ConfirmProverPath(tryProverPath);
           }
         }
@@ -192,7 +183,7 @@ The generic options may or may not be used by the prover plugin.
           }
         }
       }
-      throw new ProverException("Cannot find any java executable for smtinterpol");
+      throw new ProverException("Cannot find any java executable");
     }
 
     private string ConfirmProverPath(string proverPath)

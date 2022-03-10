@@ -37,6 +37,15 @@ namespace Microsoft.Boogie.SMTLib
           RedirectStandardOutput = true,
           RedirectStandardError = true
         };
+      } else if (options.Solver == SolverKind.PRINCESS) {
+        string javaArgs = "-Xss20000k -Xmx1500m -noverify -cp \"" + options.ExecutablePath() + "\" " + options.SolverArguments.Concat(" ");
+        psi = new ProcessStartInfo(options.JavaPath(), javaArgs) {
+          CreateNoWindow = true,
+          UseShellExecute = false,
+          RedirectStandardInput = true,
+          RedirectStandardOutput = true,
+          RedirectStandardError = true
+        };
       } else {
         psi = new ProcessStartInfo(options.ExecutablePath(), options.SolverArguments.Concat(" ")) {
           CreateNoWindow = true,

@@ -396,6 +396,17 @@ namespace Microsoft.Boogie
                 continue;
               }
             }
+            // bad way of handling bitvector literals, will only work for up to 64 bits, but will work for now
+            if (next.Name.StartsWith("#b")) {
+              int bits = next.Name.Length - 2;
+              try {
+                num = BigNum.FromULong(Convert.ToUInt64(next.Name.Substring(2), 2));
+                results.Push(gen.Bitvector(new BvConst(num, bits)));
+                continue;
+              } catch {
+
+              }
+            }
             // identifier
             bool varFound = false;
             foreach (Variable v in scopeVars) {
@@ -438,9 +449,32 @@ namespace Microsoft.Boogie
                     int bits = BVOpArgs[0].Type.BvBits;
                     results.Push(gen.BvExtract(BVOpArgs[0], bits, start, end));
                     continue;
+                  case "zero_extend":
+                  case "sign_extend":
+                    int extend = Int32.Parse(BVOp.Arguments[1].Name);
+                    int size = BVOpArgs[0].Type.BvBits;
+                    string fnName = BVOp.Arguments[0].Name + " " + extend;
+                    int outBits = size + extend;
+
+                    Function bvFn;
+                    if (bvOps.TryGetValue((fnName, size), out bvFn)) {
+                      results.Push(gen.Function(gen.BoogieFunctionOp(bvFn), BVOpArgs));
+                    } else {
+                      List<Variable> inParams = new List<Variable>();
+                      foreach (VCExpr arg in BVOpArgs) {
+                        inParams.Add(new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", arg.Type), true));
+                      }
+                      Variable result = new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", Type.GetBvType(outBits)), false);
+                      bvFn = new Function(Token.NoToken, "__" + BVOp.Arguments[0].Name + extend + "_" + size, inParams, result);
+                      bvFn.Attributes = new QKeyValue(Token.NoToken, "bvbuiltin", new List<Object> { fnName }, null);
+                      bvOps.Add((fnName, size), bvFn);
+                      newBVFunctions.Add(bvFn);
+                      results.Push(gen.Function(gen.BoogieFunctionOp(bvFn), BVOpArgs));
+                    }
+                    continue;
                   default:
                     // others that might need to be handled:
-                    // repeat, zero_extend, sign_extend, rotate_left, rotate_right
+                    // repeat, rotate_left, rotate_right
                     throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
                 }
               } else {
@@ -503,6 +537,7 @@ namespace Microsoft.Boogie
               }
               Variable result;
               // can't see a better way to do this at the moment, don't think this is all bv operators though
+              // confirmed mathsat + z3 extensions not yet handled: bvredor, bvredand
               switch (next.Name) {
                 case "bvadd":
                 case "bvsub":
@@ -534,6 +569,9 @@ namespace Microsoft.Boogie
                 case "bvsgt":
                 case "bvsge":
                   result = new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", Type.Bool), false);
+                  break;
+                case "bvcomp":
+                  result = new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", Type.GetBvType(1)), false);
                   break;
                 default:
                   throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
