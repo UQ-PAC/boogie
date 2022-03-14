@@ -345,24 +345,31 @@ namespace Microsoft.Boogie
     }
     */
 
+    // need to do something to handle binding scope properly 
     public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps, List<Function> newBVFunctions) {
       Stack<SExpr> todo = new Stack<SExpr>();
       Stack<SExpr> waiting = new Stack<SExpr>();
       Stack<VCExpr> results = new Stack<VCExpr>();
-      Stack<VCExprLetBinding> bindingsStack = new Stack<VCExprLetBinding>();
+      Stack<VCExprLetBinding> letBindings = new Stack<VCExprLetBinding>();
       HashSet<string> letNames = new HashSet<string>();
+      HashSet<string> quantNames = new HashSet<string>();
       Dictionary<string, VCExprVar> boundVars = new Dictionary<string, VCExprVar>();
       todo.Push(this);
       while (todo.Count > 0) {
         SExpr next = todo.Pop();
         if (next.Name == "let") {
-          foreach (SExpr def in next.Arguments[0].Arguments) {
+          foreach (SExpr def in next[0].Arguments) {
             letNames.Add(def.Name);
+          }
+        }
+        if (next.Name == "exists" || next.Name == "forall") {
+          foreach (SExpr def in next[0].Arguments) {
+            quantNames.Add(def.Name);
           }
         }
         waiting.Push(next);
         // _ is a special case, used to parameterise functions and types
-        if (next.Name != "_") {
+        if (next.Name != "_" && !quantNames.Contains(next.Name)) {
           foreach (SExpr arg in next.Arguments) {
             if (!(next.Name == "" && arg.Name == "_")) {
               todo.Push(arg);
@@ -434,8 +441,8 @@ namespace Microsoft.Boogie
           }
         } else {
           if (next.Name == "") {
-            if (next.Arguments[0].Name == "_") {
-              SExpr BVOp = next.Arguments[0];
+            if (next[0].Name == "_") {
+              SExpr BVOp = next[0];
               if (BVOp.ArgCount > 0) {
                 List<VCExpr> BVOpArgs = new List<VCExpr>();
                 for (int i = 1; i < next.ArgCount; i++) {
@@ -486,7 +493,7 @@ namespace Microsoft.Boogie
           // special symbol that indicates function/literal is being parameterised 
           if (next.Name == "_") {
             // bv literal shorthand function
-            if (next.Arguments[0].Name.StartsWith("bv")) {
+            if (next[0].Name.StartsWith("bv")) {
               BigNum bvValue;
               if (BigNum.TryParse(next.Arguments[0].Name.Substring(2), out bvValue)) {
                 int bits;
@@ -500,19 +507,55 @@ namespace Microsoft.Boogie
           if (letNames.Contains(next.Name)) {
             VCExpr e = results.Pop();
             VCExprVar bound = gen.Variable(next.Name, e.Type);
-            bindingsStack.Push(gen.LetBinding(bound, e));
+            letBindings.Push(gen.LetBinding(bound, e));
             boundVars.Add(next.Name, bound);
             continue;
           } else if (next.Name == "let") {
             List<VCExprLetBinding> bindings = new List<VCExprLetBinding>();
-            for (int i = 0; i < next.Arguments[0].ArgCount; i++) {
-              bindings.Add(bindingsStack.Pop());
+            for (int i = 0; i < next[0].ArgCount; i++) {
+              bindings.Add(letBindings.Pop());
             }
             foreach (VCExprLetBinding binding in bindings) {
               boundVars.Remove(binding.V.Name);
             }
             bindings.Reverse();
             results.Push(gen.Let(bindings, results.Pop()));
+            continue;
+          } else if (quantNames.Contains(next.Name)) {
+            Type boundType;
+            // need to handle bv?
+            switch(next[0].Name) {
+              case "Int":
+                boundType = Type.Int;
+                break;
+              case "Bool":
+                boundType = Type.Bool;
+                break;
+              case "Real":
+                boundType = Type.Real;
+                break;
+              case "_":
+              default:
+                throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
+            }
+            boundVars.Add(next.Name, gen.Variable(next.Name, boundType));
+            continue;
+          } else if (next.Name == "exists" || next.Name == "forall") {
+            List<VCExprVar> quantVars = new List<VCExprVar>();
+            foreach (SExpr def in next[0].Arguments) {
+              VCExprVar boundVar;
+              if (boundVars.TryGetValue(def.Name, out boundVar)) {
+                quantVars.Add(boundVar);
+                boundVars.Remove(def.Name);
+              }
+            }
+            VCExpr quantifier;
+            if (next.Name == "forall") {
+              quantifier = gen.Forall(quantVars, new List<VCTrigger>(), results.Pop());
+            } else {
+              quantifier = gen.Exists(quantVars, new List<VCTrigger>(), results.Pop());
+            }
+            results.Push(quantifier);
             continue;
           }
           List<VCExpr> args = new List<VCExpr>();

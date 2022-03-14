@@ -823,14 +823,22 @@ namespace Microsoft.Boogie
     public enum QETactic {
       qe,
       qe2,
-      qe_rec
+      qe_rec,
+      qe_light,
+      princess
     }
 
     public QETactic InterpolationQETactic { get; set; } = QETactic.qe;
 
     public int InterpolationBVMode = 0;
 
+    public bool InterpolationSimplify = false;
+
     public bool ForwardSqueeze = false;
+
+    public bool InterpolationProfiling = false;
+
+    public bool AggressiveQE = false;
 
     public string CivlDesugaredFile  { get; set; } = null;
 
@@ -1108,6 +1116,12 @@ namespace Microsoft.Boogie
                 break;
               case "qe_rec":
                 InterpolationQETactic = QETactic.qe_rec;
+                break;
+              case "qe-light":
+                InterpolationQETactic = QETactic.qe_light;
+                break;
+              case "princess":
+                InterpolationQETactic = QETactic.princess;
                 break;
               default:
                 ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);
@@ -1833,7 +1847,10 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("freeVarLambdaLifting", ref FreeVarLambdaLifting) ||
               ps.CheckBooleanFlag("pruneFunctionsAndAxioms", ref PruneFunctionsAndAxioms) ||
               ps.CheckBooleanFlag("warnNotEliminatedVars", ref WarnNotEliminatedVars) ||
-              ps.CheckBooleanFlag("forwardSqueeze", ref ForwardSqueeze)
+              ps.CheckBooleanFlag("forwardSqueeze", ref ForwardSqueeze) ||
+              ps.CheckBooleanFlag("interpolationSimplify", ref InterpolationSimplify) ||
+              ps.CheckBooleanFlag("interpolationProfiling", ref InterpolationProfiling) ||
+              ps.CheckBooleanFlag("aggressiveQE", ref AggressiveQE)
           )
           {
             // one of the boolean flags matched

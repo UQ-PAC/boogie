@@ -67,6 +67,10 @@ namespace Microsoft.Boogie.SMTLib
 
       // Make sure we get something that is parsable as a bitvector
       options.AddWeakSmtOption("pp.bv_literals", "false"); // default: true
+
+      //options.AddWeakSmtOption("pp.min_alias_size", "4294967295");
+      //options.AddWeakSmtOption("pp.max_depth", "4294967295");
+
     }
   }
 }

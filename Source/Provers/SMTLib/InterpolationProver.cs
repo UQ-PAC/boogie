@@ -107,6 +107,11 @@ namespace Microsoft.Boogie.SMTLib {
     // returns false if A && B is satisfiable meaning interpolant can't be found
     // returns true and sets resp to be output from smt solver if interpolant is found
     public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out SExpr resp) {
+      Stopwatch stopWatch = new Stopwatch();
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Start();
+      }
+
       string AStr;
       string BStr;
       InterpolationSetup("interpolant", A, B, out AStr, out BStr);
@@ -135,7 +140,12 @@ namespace Microsoft.Boogie.SMTLib {
       // need to check sat before requesting interpolant
       SendCheckSat();
       SExpr satResp = Process.GetProverResponse();
-      Debug.Print(satResp.ToString());
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Stop();
+        Console.WriteLine("interpol sat time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+        stopWatch.Reset();
+        stopWatch.Start();
+      }
 
       if (options.Solver == SolverKind.CVC5) {
         SendThisVC("(pop 1)");
@@ -145,6 +155,9 @@ namespace Microsoft.Boogie.SMTLib {
         SendThisVC("(pop 1)");
         FlushLogFile();
         resp = null;
+        if (CommandLineOptions.Clo.InterpolationProfiling) {
+          stopWatch.Stop();
+        }
         return false;
       } else if (satResp.Name != "unsat") {
         SendThisVC("(pop 1)");
@@ -173,6 +186,10 @@ namespace Microsoft.Boogie.SMTLib {
       }
 
       resp = Process.GetProverResponse();
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Stop();
+        Console.WriteLine("total interpol time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+      }
       //Console.WriteLine("interpolant: " + resp.ToString());
       if (options.Solver == SolverKind.CVC5) {
         // CVC5 adds extraneous function definition stuff like this

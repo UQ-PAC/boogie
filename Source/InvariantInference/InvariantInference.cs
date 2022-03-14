@@ -22,11 +22,12 @@ namespace Microsoft.Boogie.InvariantInference {
       InterpolationProver interpol = InterpolationProver.CreateProver(program, CommandLineOptions.Clo.InterpolationLogFilePath,
         CommandLineOptions.Clo.InterpolationLogFileAppend, CommandLineOptions.Clo.TimeLimit);
 
-      /*
-      if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
+      
+      if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess &&
+        CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.princess) {
         prover = interpol;
       }
-      */
+      
       // get bv op functions
 
       SortedDictionary<(string op, int size), Function> BitVectorOpFunctions = new SortedDictionary<(string, int), Function>();
@@ -227,6 +228,7 @@ namespace Microsoft.Boogie.InvariantInference {
     private Block loopHead;
     private SortedDictionary<(string op, int size), Function> bvOps;
     private List<Function> newBVFunctions;
+    private bool aggressiveQE = CommandLineOptions.Clo.AggressiveQE;
 
     public InvariantInferrer(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
       ProverInterface prover, InterpolationProver interpol, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
@@ -244,6 +246,7 @@ namespace Microsoft.Boogie.InvariantInference {
     public VCExpr InferLoopInvariant() {
       Stopwatch stopWatch = new Stopwatch();
       stopWatch.Start();
+      Stopwatch loopTime = new Stopwatch();
 
       Block start = impl.Blocks[0];
       List<Block> ends = getEndBlocks();
@@ -254,9 +257,8 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpr loopP = getLoopPreCondition(requires, start);
       VCExpr loopQ = getLoopPostCondition(ensures, ends);
 
-
-      VCExpr loopPElim = loopPElim = prover.EliminateQuantifiers(loopP, scopeVars, bvOps, newBVFunctions);
-      VCExpr loopQElim = loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars, bvOps, newBVFunctions);
+      VCExpr loopPElim = prover.EliminateQuantifiers(loopP, scopeVars, bvOps, newBVFunctions);
+      VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars, bvOps, newBVFunctions);
       /*
       VCExpr loopPElim = loopP;
       VCExpr loopQElim = loopQ;
@@ -302,14 +304,32 @@ namespace Microsoft.Boogie.InvariantInference {
       int concrete = 0;
       int iterations = 0;
       bool doConcrete = false;
+
       while (true) {
+        if (CommandLineOptions.Clo.InterpolationProfiling) {
+          if (iterations > 0) {
+            loopTime.Stop();
+            Console.WriteLine("iter " + iterations + " time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+            loopTime.Reset();
+            loopTime.Start();
+          } else {
+            loopTime.Start();
+          }
+        }
+
         iterations++;
 
         VCExpr ADisjunct = listDisjunction(A);
         VCExpr B_rElim = B[r];
         //if (CommandLineOptions.Clo.InterpolantSolverKind != CommandLineOptions.InterpolantSolver.Princess) {
+
+        if (!aggressiveQE) {
           B_rElim = prover.EliminateQuantifiers(B[r], scopeVars, bvOps, newBVFunctions);
-        //}
+          if (B[r] == B[r]) {
+            B_rElim = prover.Simplify(B_rElim, scopeVars, bvOps, newBVFunctions);
+          }
+        }
+          //}
 
         if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
           Console.WriteLine("B: " + B_rElim);
@@ -328,12 +348,15 @@ namespace Microsoft.Boogie.InvariantInference {
         if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out resp)) { 
           interpolantiterations++;
           VCExpr I = resp.ToVC(gen, translator, scopeVars, bvOps, newBVFunctions);
+
           VCExpr InvariantCandidate;
           if (Forward) {
             InvariantCandidate = I;
           } else {
             InvariantCandidate = gen.NotSimp(I);
           }
+          // only matters for princess sometimes
+          InvariantCandidate = prover.EliminateQuantifiers(InvariantCandidate, scopeVars, bvOps, newBVFunctions);
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("invar candidate: " + InvariantCandidate.ToString());
             Console.Out.Flush();
@@ -342,10 +365,13 @@ namespace Microsoft.Boogie.InvariantInference {
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All
             || DebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
             int size = SizeComputingVisitor.ComputeSize(InvariantCandidate);
+            Console.WriteLine("invar candidate raw: " + I.ToString());
+            Console.WriteLine("invar candidate: " + InvariantCandidate.ToString());
             Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
             Console.Out.Flush();
 
             // extra checks to catch potential unsoundness in algorithm, only do when debug info enabled
+            /*
             if (!satisfiable(gen.ImpliesSimp(gen.AndSimp(InvariantCandidate, NotK), loopQ))) {
               Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
               Console.Out.Flush();
@@ -356,6 +382,7 @@ namespace Microsoft.Boogie.InvariantInference {
               Console.Out.Flush();
               throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
+            */
           }
           
           if (isInductive(InvariantCandidate, loopBody, K)) {
@@ -398,12 +425,17 @@ namespace Microsoft.Boogie.InvariantInference {
           } else {
             AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
           }
-          VCExpr AElim;
+          VCExpr AElim = AExpr;
           //if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
-         //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
-         // } else {
+          //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+          // } else {
+          if (!aggressiveQE) {
             AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
-         // }
+            if (AExpr == AElim) {
+              AElim = prover.Simplify(AElim, scopeVars, bvOps, newBVFunctions);
+            }
+          }
+          // }
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("A: " + AElim);
             Console.Out.Flush();
@@ -439,12 +471,17 @@ namespace Microsoft.Boogie.InvariantInference {
             if (Forward) {
               t = concrete;
               VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
-              VCExpr AElim;
-             // if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
-             //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
-            //  } else {
+              VCExpr AElim = AExpr;
+              // if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
+              //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+              //  } else {
+              if (!aggressiveQE) {
                 AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
-           //   }
+                if (AExpr == AElim) {
+                  AElim = prover.Simplify(AElim, scopeVars, bvOps, newBVFunctions);
+                }
+              }
+              //   }
 
               A.Insert(t + 1, AElim);
               t++;
@@ -865,8 +902,11 @@ namespace Microsoft.Boogie.InvariantInference {
           SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
           VCExpr substQ = substituter.Mutate(Q, subst);
 
-          return gen.Forall(freshVars, new List<VCTrigger>(), substQ);
-          //return prover.EliminateQuantifiers(gen.Forall(freshVars, new List<VCTrigger>(), substQ), scopeVars);
+          if (aggressiveQE) {
+            return prover.EliminateQuantifiers(gen.Forall(freshVars, new List<VCTrigger>(), substQ), scopeVars, bvOps, newBVFunctions);
+          } else {
+            return gen.Forall(freshVars, new List<VCTrigger>(), substQ);
+          }
         }
       } else if (cmd is AssignCmd) {
         // x := e -> Q[x\e]
@@ -956,8 +996,12 @@ namespace Microsoft.Boogie.InvariantInference {
               substP = gen.AndSimp(substP, w);
             }
           }
-          return substP;
-          //return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars);
+
+          if (aggressiveQE) {
+            return prover.EliminateQuantifiers(substP, scopeVars, bvOps, newBVFunctions);
+          } else {
+            return substP;
+          }
         }
 
       } else if (cmd is AssignCmd) {
@@ -1001,8 +1045,12 @@ namespace Microsoft.Boogie.InvariantInference {
             VCExpr substRhs = substituter.Mutate(assign.Item2, subst);
             substP = gen.AndSimp(substP, gen.Eq(assign.Item1, substRhs));
           }
-          //return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars);
-          return gen.Exists(freshVars, new List<VCTrigger>(), substP);
+
+          if (aggressiveQE) {
+            return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars, bvOps, newBVFunctions);
+          } else {
+            return gen.Exists(freshVars, new List<VCTrigger>(), substP);
+          }
         }
 
       } else if (cmd is CallCmd) {

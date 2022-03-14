@@ -542,7 +542,65 @@ namespace Microsoft.Boogie.SMTLib
       }
     }
 
+
+    public override VCExpr Simplify(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+      if (!CommandLineOptions.Clo.InterpolationSimplify) {
+        return predicate;
+      }
+      if (options.Solver != SolverKind.Z3) {
+        throw new Exception("simplification only supported in Z3");
+      }
+      if (options.SeparateLogFiles) {
+        CloseLogFile(); // shouldn't really happen
+      }
+      PrepareCommon();
+      FlushAndCacheCommons();
+      string SMTPred = VCExpr2String(predicate, 1);
+      FlushAxioms();
+      SendThisVC("(push 1)");
+      SendThisVC("(assert " + SMTPred + ")");
+      SendThisVC("(apply ctx-simplify)");
+      var resp = Process.GetProverResponse();
+      //Console.WriteLine(SMTPred);
+      //Console.WriteLine(resp.ToString());
+      FlushLogFile();
+      SendThisVC("(pop 1)");
+      List<SExpr> goodOut = new List<SExpr>();
+      if (resp.Name == "goals") {
+        // assume only single goal for now
+        if (resp.ArgCount != 1) {
+          throw new NotImplementedException("goals != 1");
+        }
+        var goal = resp.Arguments[0];
+        if (goal.Name == "goal") {
+          foreach (SExpr arg in goal.Arguments) {
+            if (arg.Name != "tickleBool" && arg.ArgCount > 0) {
+              // remove extraneous output such as ticklebool & precision info
+              goodOut.Add(arg);
+            } else if (arg.Name == "true" || arg.Name == "false") {
+              goodOut.Add(arg);
+            }
+          }
+        }
+      }
+      if (goodOut.Count() > 1) {
+        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+      } else if (goodOut.Count() == 1) {
+        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+      } else if (goodOut.Count() == 0) {
+        // empty goal returned - I think this should mean it simplified things to true?
+        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+      }
+      throw new Exception("error in converting solver output from simplification: " + resp.ToString());
+    }
+    
+
     public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+      Stopwatch stopWatch = new Stopwatch();
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Start();
+      }
+
       /*
       if (options.Solver != SolverKind.Z3) {
         throw new Exception("qe only supported in Z3");
@@ -560,33 +618,64 @@ namespace Microsoft.Boogie.SMTLib
       PrepareCommon();
       FlushAndCacheCommons();
       string SMTPred = VCExpr2String(predicate, 1);
-      FlushAxioms();
-      if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
-        return predicate; 
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Stop();
+        Console.WriteLine("qe setup time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
       }
 
+      FlushAxioms();
+      if (!SMTPred.Contains("exists") && !SMTPred.Contains("forall")) {
+        return predicate;
+      }
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Reset();
+        stopWatch.Start();
+      }
       if (options.Solver == SolverKind.Z3) {
         SendThisVC("(push 1)");
         SendThisVC("(assert " + SMTPred + ")");
         FlushLogFile();
-        if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe) {
-          SendThisVC("(apply qe)");
-        } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe2) {
-          SendThisVC("(apply qe2)");
-        } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.qe_rec) {
-          SendThisVC("(apply qe_rec)");
+        String QETactic;
+        switch (CommandLineOptions.Clo.InterpolationQETactic) {
+          case CommandLineOptions.QETactic.qe:
+            QETactic = "qe";
+            break;
+          case CommandLineOptions.QETactic.qe2:
+            QETactic = "qe2";
+            break;
+          case CommandLineOptions.QETactic.qe_rec:
+            QETactic = "qe_rec";
+            break;
+          case CommandLineOptions.QETactic.qe_light:
+            QETactic = "qe-light";
+            break;
+          default:
+            throw new Exception("incompatible qe tactic");
         }
-      } else if (options.Solver == SolverKind.PRINCESS) {
+        if (CommandLineOptions.Clo.InterpolationSimplify) {
+          SendThisVC("(apply (then " + QETactic + " ctx-simplify))");
+        } else {
+          SendThisVC("(apply " + QETactic + ")");
+        }
+
+      } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.princess) {
         SendThisVC("(push 1)");
         SendThisVC("(simplify" + SMTPred + ")");
       }
 
       var resp = Process.GetProverResponse();
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Stop();
+        Console.WriteLine("qe time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+      }
       //Console.WriteLine(SMTPred);
       //Console.WriteLine(resp.ToString());
       FlushLogFile();
-      SendThisVC("(pop 1)"); 
+      SendThisVC("(pop 1)");
+      stopWatch.Reset();
+      stopWatch.Start();
       List<SExpr> goodOut = new List<SExpr>();
+      VCExpr parsed;
       if (options.Solver == SolverKind.Z3) {
         if (resp.Name == "goals") {
           // assume only single goal for now
@@ -606,16 +695,36 @@ namespace Microsoft.Boogie.SMTLib
           }
         }
         if (goodOut.Count() > 1) {
-          return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+          parsed = new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+          if (CommandLineOptions.Clo.InterpolationProfiling) {
+            stopWatch.Stop();
+            Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+          }
+          return parsed;
         } else if (goodOut.Count() == 1) {
-          return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+          parsed = goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+          if (CommandLineOptions.Clo.InterpolationProfiling) {
+            stopWatch.Stop();
+            Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+          }
+          return parsed;
         } else if (goodOut.Count() == 0) {
           // empty goal returned - I think this should mean it simplified things to true?
-          return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+          parsed = new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+          if (CommandLineOptions.Clo.InterpolationProfiling) {
+            stopWatch.Stop();
+            Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+          }
+          return parsed;
         }
 
-      } else if (options.Solver == SolverKind.PRINCESS) {
-        return resp.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+      } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.princess) {
+        parsed = resp.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        if (CommandLineOptions.Clo.InterpolationProfiling) {
+          stopWatch.Stop();
+          Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+        }
+        return parsed;
       }
 
       throw new Exception("error in converting solver output from qe: " + resp.ToString());
