@@ -543,7 +543,7 @@ namespace Microsoft.Boogie.SMTLib
     }
 
 
-    public override VCExpr Simplify(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+    public override VCExpr Simplify(VCExpr predicate, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
       if (!CommandLineOptions.Clo.InterpolationSimplify) {
         return predicate;
       }
@@ -584,18 +584,18 @@ namespace Microsoft.Boogie.SMTLib
         }
       }
       if (goodOut.Count() > 1) {
-        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
+        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, bvOps, newBVFunctions, Namer);
       } else if (goodOut.Count() == 1) {
-        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
+        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, bvOps, newBVFunctions, Namer);
       } else if (goodOut.Count() == 0) {
         // empty goal returned - I think this should mean it simplified things to true?
-        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
+        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, bvOps, newBVFunctions, Namer);
       }
       throw new Exception("error in converting solver output from simplification: " + resp.ToString());
     }
 
 
-    public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+    public override VCExpr EliminateQuantifiers(VCExpr predicate, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
       Stopwatch stopWatch = new Stopwatch();
       if (CommandLineOptions.Clo.InterpolationProfiling) {
         stopWatch.Start();
@@ -720,7 +720,7 @@ namespace Microsoft.Boogie.SMTLib
         }
         */
         
-        parsed = qeResult.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
+        parsed = qeResult.ToVC(gen, ctx.BoogieExprTranslator, bvOps, newBVFunctions, Namer);
         if (CommandLineOptions.Clo.InterpolationProfiling) {
           stopWatch.Stop();
           Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
@@ -728,7 +728,7 @@ namespace Microsoft.Boogie.SMTLib
         return parsed;
 
       } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.princess) {
-        parsed = resp.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
+        parsed = resp.ToVC(gen, ctx.BoogieExprTranslator, bvOps, newBVFunctions, Namer);
         if (CommandLineOptions.Clo.InterpolationProfiling) {
           stopWatch.Stop();
           Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));

@@ -346,7 +346,7 @@ namespace Microsoft.Boogie
     */
 
     // need to do something to handle binding scope properly 
-    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps, List<Function> newBVFunctions, UniqueNamer namer) {
+    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, SortedDictionary<(string op, int size), Function> bvOps, List<Function> newBVFunctions, UniqueNamer namer) {
       Stack<SExpr> todo = new Stack<SExpr>();
       Stack<SExpr> waiting = new Stack<SExpr>();
       Stack<VCExpr> results = new Stack<VCExpr>();

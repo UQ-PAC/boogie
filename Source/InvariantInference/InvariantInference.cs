@@ -50,6 +50,7 @@ namespace Microsoft.Boogie.InvariantInference {
             bool backEdgeFound = false;
 
             // naive attempt at getting variables that may be referred to
+
             IEnumerable<Variable> scopeVars = new List<Variable>();
             scopeVars = scopeVars.Concat(program.GlobalVariables);
             scopeVars = scopeVars.Concat(impl.LocVars);
@@ -71,7 +72,7 @@ namespace Microsoft.Boogie.InvariantInference {
                 } else {
                   backEdgeFound = true;
 
-                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, scopeVars, BitVectorOpFunctions, newBVFunctions);
+                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, BitVectorOpFunctions, newBVFunctions);
                   VCExpr invariant = inferrer.InferLoopInvariant();
                   Instrument(b, invariant, scopeVars, BitVectorOpFunctions);
                 }
@@ -237,7 +238,7 @@ namespace Microsoft.Boogie.InvariantInference {
     private VCExpressionGenerator gen;
     private ProverInterface prover;
     private InterpolationProver interpol;
-    private IEnumerable<Variable> scopeVars;
+    //private IEnumerable<Variable> scopeVars;
     private Implementation impl;
     private Block loopHead;
     private SortedDictionary<(string op, int size), Function> bvOps;
@@ -246,10 +247,10 @@ namespace Microsoft.Boogie.InvariantInference {
     private bool manualQE = CommandLineOptions.Clo.ManualQE;
 
     public InvariantInferrer(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
-      ProverInterface prover, InterpolationProver interpol, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+      ProverInterface prover, InterpolationProver interpol, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
       this.translator = prover.Context.BoogieExprTranslator;
       this.gen = prover.Context.ExprGen;
-      this.scopeVars = scopeVars;
+      //this.scopeVars = scopeVars;
       this.prover = prover;
       this.impl = impl;
       this.loopHead = loopHead;
@@ -272,8 +273,8 @@ namespace Microsoft.Boogie.InvariantInference {
       VCExpr loopP = getLoopPreCondition(requires, start);
       VCExpr loopQ = getLoopPostCondition(ensures, ends);
 
-      VCExpr loopPElim = prover.EliminateQuantifiers(loopP, scopeVars, bvOps, newBVFunctions);
-      VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, scopeVars, bvOps, newBVFunctions);
+      VCExpr loopPElim = prover.EliminateQuantifiers(loopP, bvOps, newBVFunctions);
+      VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, bvOps, newBVFunctions);
       /*
       VCExpr loopPElim = loopP;
       VCExpr loopQElim = loopQ;
@@ -339,9 +340,9 @@ namespace Microsoft.Boogie.InvariantInference {
         //if (CommandLineOptions.Clo.InterpolantSolverKind != CommandLineOptions.InterpolantSolver.Princess) {
 
         if (!aggressiveQE) {
-          B_rElim = prover.EliminateQuantifiers(B[r], scopeVars, bvOps, newBVFunctions);
+          B_rElim = prover.EliminateQuantifiers(B[r], bvOps, newBVFunctions);
           if (B[r] == B[r]) {
-            B_rElim = prover.Simplify(B_rElim, scopeVars, bvOps, newBVFunctions);
+            B_rElim = prover.Simplify(B_rElim, bvOps, newBVFunctions);
           }
         }
           //}
@@ -360,7 +361,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
 
         VCExpr I;
-        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, scopeVars, bvOps, newBVFunctions)) { 
+        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, bvOps, newBVFunctions)) { 
           interpolantiterations++;
 
           VCExpr InvariantCandidate;
@@ -370,7 +371,7 @@ namespace Microsoft.Boogie.InvariantInference {
             InvariantCandidate = gen.NotSimp(I);
           }
           // only matters for princess sometimes
-          InvariantCandidate = prover.EliminateQuantifiers(InvariantCandidate, scopeVars, bvOps, newBVFunctions);
+          InvariantCandidate = prover.EliminateQuantifiers(InvariantCandidate, bvOps, newBVFunctions);
           /*
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("invar candidate: " + InvariantCandidate.ToString());
@@ -445,9 +446,9 @@ namespace Microsoft.Boogie.InvariantInference {
           //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
           // } else {
           if (!aggressiveQE) {
-            AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+            AElim = prover.EliminateQuantifiers(AExpr, bvOps, newBVFunctions);
             if (AExpr == AElim) {
-              AElim = prover.Simplify(AElim, scopeVars, bvOps, newBVFunctions);
+              AElim = prover.Simplify(AElim, bvOps, newBVFunctions);
             }
           }
           // }
@@ -491,9 +492,9 @@ namespace Microsoft.Boogie.InvariantInference {
               //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
               //  } else {
               if (!aggressiveQE) {
-                AElim = prover.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
+                AElim = prover.EliminateQuantifiers(AExpr, bvOps, newBVFunctions);
                 if (AExpr == AElim) {
-                  AElim = prover.Simplify(AElim, scopeVars, bvOps, newBVFunctions);
+                  AElim = prover.Simplify(AElim, bvOps, newBVFunctions);
                 }
               }
               //   }
@@ -918,7 +919,7 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr substQ = substituter.Mutate(Q, subst);
 
           if (aggressiveQE) {
-            return prover.EliminateQuantifiers(gen.Forall(freshVars, new List<VCTrigger>(), substQ), scopeVars, bvOps, newBVFunctions);
+            return prover.EliminateQuantifiers(gen.Forall(freshVars, new List<VCTrigger>(), substQ), bvOps, newBVFunctions);
           } else {
             return gen.Forall(freshVars, new List<VCTrigger>(), substQ);
           }
@@ -1016,7 +1017,7 @@ namespace Microsoft.Boogie.InvariantInference {
           }
 
           if (aggressiveQE) {
-            return prover.EliminateQuantifiers(substP, scopeVars, bvOps, newBVFunctions);
+            return prover.EliminateQuantifiers(substP, bvOps, newBVFunctions);
           } else {
             return substP;
           }
@@ -1069,7 +1070,7 @@ namespace Microsoft.Boogie.InvariantInference {
           }
 
           if (aggressiveQE) {
-            return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), scopeVars, bvOps, newBVFunctions);
+            return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), bvOps, newBVFunctions);
           } else {
             return gen.Exists(freshVars, new List<VCTrigger>(), substP);
           }
