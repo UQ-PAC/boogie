@@ -415,6 +415,11 @@ namespace Microsoft.Boogie
               }
             }
             // identifier
+            VCExprVar boundVar;
+            if (boundVars.TryGetValue(next.Name, out boundVar)) {
+              results.Push(boundVar);
+              continue;
+            }
             Object obj;
             if (namer.NameToRef.TryGetValue(next.Name, out obj)) {
               if (obj is VCExprVar) {
@@ -422,9 +427,9 @@ namespace Microsoft.Boogie
                 continue;
               }
             }
-            
-            bool varFound = false;
+
             /*
+            bool varFound = false;
             foreach (Variable v in scopeVars) {
               if (v.Name.Equals(next.Name)) {
                 results.Push(translator.LookupVariable(v));
@@ -435,16 +440,6 @@ namespace Microsoft.Boogie
             if (varFound) {
               continue;
             } */
-            foreach (KeyValuePair<string, VCExprVar> kv in boundVars) {
-              if (kv.Key.Equals(next.Name)) {
-                results.Push(kv.Value);
-                varFound = true;
-                break;
-              }
-            }
-            if (varFound) {
-              continue;
-            }
 
             throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
           }

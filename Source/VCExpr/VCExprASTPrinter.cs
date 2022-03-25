@@ -49,6 +49,10 @@ namespace Microsoft.Boogie.VCExprAST
       {
         wr.Write(((VCExprIntLit) node).Val);
       }
+      else if (node is VCExprRealLit)
+      {
+        wr.Write(((VCExprRealLit)node).Val);
+      }
       else
       {
         Contract.Assert(false);
