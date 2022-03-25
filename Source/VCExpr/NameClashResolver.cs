@@ -21,6 +21,7 @@ namespace Microsoft.Boogie.VCExprAST
       LocalNames = TEHelperFuns.ToList(new Dictionary<Object /*!*/, string /*!*/>()
         as IDictionary<Object /*!*/, string /*!*/>);
       UsedNames = new HashSet<string>();
+      NameToRef = new Dictionary<string, Object>();
       CurrentCounters = new Dictionary<string, int>();
       GlobalPlusLocalNames = new Dictionary<Object, string>();
     }
@@ -40,6 +41,7 @@ namespace Microsoft.Boogie.VCExprAST
 
       UsedNames = new HashSet<string>(namer.UsedNames);
       CurrentCounters = new Dictionary<string, int>(namer.CurrentCounters);
+      NameToRef = new Dictionary<string, Object>(namer.NameToRef);
       GlobalPlusLocalNames = new Dictionary<Object, string>(namer.GlobalPlusLocalNames);
     }
 
@@ -56,6 +58,7 @@ namespace Microsoft.Boogie.VCExprAST
       LocalNames.Add(new Dictionary<Object /*!*/, string /*!*/>());
       UsedNames.Clear();
       CurrentCounters.Clear();
+      NameToRef.Clear();
       GlobalPlusLocalNames.Clear();
     }
 
@@ -83,6 +86,8 @@ namespace Microsoft.Boogie.VCExprAST
     // (locally or globally)
     private readonly HashSet<string /*!*/> /*!*/
       UsedNames;
+
+    public readonly Dictionary<string, Object> NameToRef;
 
     [ContractInvariantMethod]
     void UsedNamesInvariantMethod()
@@ -148,6 +153,7 @@ namespace Microsoft.Boogie.VCExprAST
       }
 
       UsedNames.Add(candidate);
+      NameToRef.Add(candidate, thingie);
       CurrentCounters[baseName] = counter;
       GlobalPlusLocalNames[thingie] = candidate;
       return candidate;

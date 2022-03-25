@@ -106,7 +106,7 @@ namespace Microsoft.Boogie.SMTLib {
 
     // returns false if A && B is satisfiable meaning interpolant can't be found
     // returns true and sets resp to be output from smt solver if interpolant is found
-    public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out SExpr resp) {
+    public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out VCExpr I, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
       Stopwatch stopWatch = new Stopwatch();
       if (CommandLineOptions.Clo.InterpolationProfiling) {
         stopWatch.Start();
@@ -154,7 +154,7 @@ namespace Microsoft.Boogie.SMTLib {
       if (satResp.Name == "sat") {
         SendThisVC("(pop 1)");
         FlushLogFile();
-        resp = null;
+        I = null;
         if (CommandLineOptions.Clo.InterpolationProfiling) {
           stopWatch.Stop();
         }
@@ -185,7 +185,7 @@ namespace Microsoft.Boogie.SMTLib {
         SendThisVC("(get-interpolants)");
       }
 
-      resp = Process.GetProverResponse();
+      SExpr resp = Process.GetProverResponse();
       if (CommandLineOptions.Clo.InterpolationProfiling) {
         stopWatch.Stop();
         Console.WriteLine("total interpol time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
@@ -197,6 +197,7 @@ namespace Microsoft.Boogie.SMTLib {
       }
       SendThisVC("(pop 1)");
       FlushLogFile();
+      I = resp.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
 
       //Dictionary<String, SExpr> letDefs = new Dictionary<String, SExpr>();
       //return SExpr.ResolveLet(resp, letDefs);

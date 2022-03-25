@@ -1,0 +1,8 @@
+failure,3,1,1,,0.922
+D:\work\repos\boogie\Source\benchmarks\zilu\benchmark52_polynomial.bpl(7,3): Error: This assertion might not hold.
+Execution trace:
+    D:\work\repos\boogie\Source\benchmarks\zilu\benchmark52_polynomial.bpl(3,3): anon0
+    D:\work\repos\boogie\Source\benchmarks\zilu\benchmark52_polynomial.bpl(4,3): anon3_LoopHead
+    D:\work\repos\boogie\Source\benchmarks\zilu\benchmark52_polynomial.bpl(4,3): anon3_LoopDone
+
+Boogie program verifier finished with 0 verified, 1 error

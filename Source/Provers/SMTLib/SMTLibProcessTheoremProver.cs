@@ -43,8 +43,8 @@ namespace Microsoft.Boogie.SMTLib
   public class SMTLibProcessTheoremProver : ProverInterface
   {
     private readonly SMTLibOptions libOptions;
-    private readonly SMTLibProverContext ctx;
-    private VCExpressionGenerator gen;
+    protected readonly SMTLibProverContext ctx;
+    protected VCExpressionGenerator gen;
     protected readonly SMTLibProverOptions options;
     private bool usingUnsatCore;
 
@@ -584,16 +584,16 @@ namespace Microsoft.Boogie.SMTLib
         }
       }
       if (goodOut.Count() > 1) {
-        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        return new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
       } else if (goodOut.Count() == 1) {
-        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        return goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
       } else if (goodOut.Count() == 0) {
         // empty goal returned - I think this should mean it simplified things to true?
-        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        return new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
       }
       throw new Exception("error in converting solver output from simplification: " + resp.ToString());
     }
-    
+
 
     public override VCExpr EliminateQuantifiers(VCExpr predicate, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
       Stopwatch stopWatch = new Stopwatch();
@@ -672,8 +672,10 @@ namespace Microsoft.Boogie.SMTLib
       //Console.WriteLine(resp.ToString());
       FlushLogFile();
       SendThisVC("(pop 1)");
-      stopWatch.Reset();
-      stopWatch.Start();
+      if (CommandLineOptions.Clo.InterpolationProfiling) {
+        stopWatch.Reset();
+        stopWatch.Start();
+      }
       List<SExpr> goodOut = new List<SExpr>();
       VCExpr parsed;
       if (options.Solver == SolverKind.Z3) {
@@ -694,32 +696,39 @@ namespace Microsoft.Boogie.SMTLib
             }
           }
         }
+        SExpr qeResult;
         if (goodOut.Count() > 1) {
-          parsed = new SExpr("and", goodOut).ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
-          if (CommandLineOptions.Clo.InterpolationProfiling) {
-            stopWatch.Stop();
-            Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
-          }
-          return parsed;
+          qeResult = new SExpr("and", goodOut);
         } else if (goodOut.Count() == 1) {
-          parsed = goodOut[0].ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
-          if (CommandLineOptions.Clo.InterpolationProfiling) {
-            stopWatch.Stop();
-            Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
-          }
-          return parsed;
+          qeResult = goodOut[0];
         } else if (goodOut.Count() == 0) {
-          // empty goal returned - I think this should mean it simplified things to true?
-          parsed = new SExpr("true").ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
-          if (CommandLineOptions.Clo.InterpolationProfiling) {
-            stopWatch.Stop();
-            Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
-          }
-          return parsed;
+          // empty goal returned - this should mean it simplified things to true
+          qeResult = new SExpr("true");
+        } else {
+          throw new cce.UnreachableException();
         }
+        /*
+         * trying to check equivalence of quantified/quantifier-free but Z3 can't do that
+        SendThisVC("(push 1)");
+        SendThisVC("(assert (not (= " + SMTPred + qeResult.ToString() + ")))");
+        SendThisVC("(check-sat)");
+        var satResp = Process.GetProverResponse();
+        if (satResp.Name == "unsat") {
+          SendThisVC("(pop 1)");
+        } else {
+          throw new Exception("qe introducing unsoundness");
+        }
+        */
+        
+        parsed = qeResult.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
+        if (CommandLineOptions.Clo.InterpolationProfiling) {
+          stopWatch.Stop();
+          Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));
+        }
+        return parsed;
 
       } else if (CommandLineOptions.Clo.InterpolationQETactic == CommandLineOptions.QETactic.princess) {
-        parsed = resp.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions);
+        parsed = resp.ToVC(gen, ctx.BoogieExprTranslator, scopeVars, bvOps, newBVFunctions, Namer);
         if (CommandLineOptions.Clo.InterpolationProfiling) {
           stopWatch.Stop();
           Console.WriteLine("qe parse time: " + String.Format("{0:N3}", stopWatch.Elapsed.TotalSeconds));

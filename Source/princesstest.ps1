@@ -4,8 +4,12 @@ function RunBoogie {
     $f, $folder, $timeoutSeconds, $qe, $solver
   )
 
+  if (!(Test-Path -path ($folder + $solver + $qe + "long\"))) {
+    New-Item -ItemType Directory -Force -Path ($folder + $solver + $qe + "long\")
+  }
+
   $boogieArgs = " /interpolationQE:" + $qe + " /interpolationDebug:3 /inferInterpolant:" + $solver + " " + $f.FullName
-  $outfile = $folder + $solver + $qe + "\" + ($f.Name -replace "\..+") + ".txt"
+  $outfile = $folder + $solver + $qe + "long\" + ($f.Name -replace "\..+") + ".txt"
   if (!(Test-Path $outfile)) {
     $proc = Start-Process -FilePath "BoogieDriver/bin/Debug/net5.0/BoogieDriver.exe" -PassThru -NoNewWindow -ArgumentList $boogieArgs -RedirectStandardOutput $outfile
     $proc | Wait-Process -Timeout $timeoutSeconds -ErrorAction SilentlyContinue -ErrorVariable timeouted
@@ -45,11 +49,10 @@ function RunBoogie {
 
 $folder = $args[0]
 $files = Get-ChildItem ($folder + "*") -File -Include "*.bpl"
-$timeoutseconds = 60
-if (!(Test-Path -path ($folder + "princessqe\"))) {
-  New-Item -ItemType Directory -Force -Path ($folder + "princessqe\")
-}
+$timeoutseconds = 120
 
 foreach ($f in $files) {
   RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "princess"
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "princess"
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "princess"
 }

@@ -32,7 +32,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
       SortedDictionary<(string op, int size), Function> BitVectorOpFunctions = new SortedDictionary<(string, int), Function>();
       foreach (Function f in program.Functions) {
-        if (f.Attributes.Key == "bvbuiltin") {
+        if (f.Attributes != null && f.Attributes.Key == "bvbuiltin") {
           string op = (f.Attributes.Params[0] as string);
           int size = f.InParams[0].TypedIdent.Type.BvBits;
           BitVectorOpFunctions.Add((op, size), f);
@@ -199,6 +199,20 @@ namespace Microsoft.Boogie.InvariantInference {
         Expr body = VCtoExpr(vcLet.Body, scopeVarsWithBound, bvOps);
 
         return new LetExpr(Token.NoToken, dummies, rhss, null, body);
+      } else if (vc is VCExprQuantifier) {
+        VCExprQuantifier vcQuant = vc as VCExprQuantifier;
+        List<Variable> dummies = new List<Variable>();
+        foreach (VCExprVar bound in vcQuant.BoundVars) {
+          dummies.Add(new BoundVariable(Token.NoToken, new TypedIdent(Token.NoToken, bound.Name, bound.Type)));
+        }
+
+        IEnumerable<Variable> scopeVarsWithBound = scopeVars.Concat(dummies);
+        Expr body = VCtoExpr(vcQuant.Body, scopeVarsWithBound, bvOps);
+        if (vcQuant.Quan == Quantifier.ALL) {
+          return new ForallExpr(Token.NoToken, dummies, body);
+        } else {
+          return new ExistsExpr(Token.NoToken, dummies, body);
+        }
       }
 
       throw new NotImplementedException("unimplemented for conversion to Expr: " + vc);
@@ -229,6 +243,7 @@ namespace Microsoft.Boogie.InvariantInference {
     private SortedDictionary<(string op, int size), Function> bvOps;
     private List<Function> newBVFunctions;
     private bool aggressiveQE = CommandLineOptions.Clo.AggressiveQE;
+    private bool manualQE = CommandLineOptions.Clo.ManualQE;
 
     public InvariantInferrer(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
       ProverInterface prover, InterpolationProver interpol, IEnumerable<Variable> scopeVars, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
@@ -344,10 +359,9 @@ namespace Microsoft.Boogie.InvariantInference {
           Console.Out.Flush();
         }
 
-        SExpr resp;
-        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out resp)) { 
+        VCExpr I;
+        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, scopeVars, bvOps, newBVFunctions)) { 
           interpolantiterations++;
-          VCExpr I = resp.ToVC(gen, translator, scopeVars, bvOps, newBVFunctions);
 
           VCExpr InvariantCandidate;
           if (Forward) {
@@ -357,15 +371,16 @@ namespace Microsoft.Boogie.InvariantInference {
           }
           // only matters for princess sometimes
           InvariantCandidate = prover.EliminateQuantifiers(InvariantCandidate, scopeVars, bvOps, newBVFunctions);
+          /*
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
             Console.WriteLine("invar candidate: " + InvariantCandidate.ToString());
             Console.Out.Flush();
-          }
+          }*/
 
           if (DebugLevel == CommandLineOptions.InterpolationDebug.All
             || DebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
             int size = SizeComputingVisitor.ComputeSize(InvariantCandidate);
-            Console.WriteLine("invar candidate raw: " + I.ToString());
+            //Console.WriteLine("invar candidate raw: " + I.ToString());
             Console.WriteLine("invar candidate: " + InvariantCandidate.ToString());
             Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
             Console.Out.Flush();
@@ -990,7 +1005,10 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr substP = substituter.Mutate(P, subst);
 
           //return substP;
-          substP = gen.Exists(freshVars, new List<VCTrigger>(), substP);
+          if (!manualQE) {
+            substP = gen.Exists(freshVars, new List<VCTrigger>(), substP);
+          }
+
           if (whereExprs.Count > 0) {
             foreach (VCExpr w in whereExprs) {
               substP = gen.AndSimp(substP, w);
@@ -1044,6 +1062,10 @@ namespace Microsoft.Boogie.InvariantInference {
           foreach ((VCExprVar, VCExpr) assign in assignments) {
             VCExpr substRhs = substituter.Mutate(assign.Item2, subst);
             substP = gen.AndSimp(substP, gen.Eq(assign.Item1, substRhs));
+          }
+
+          if (manualQE) {
+            return substP;
           }
 
           if (aggressiveQE) {

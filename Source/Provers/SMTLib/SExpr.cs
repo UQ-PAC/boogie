@@ -346,7 +346,7 @@ namespace Microsoft.Boogie
     */
 
     // need to do something to handle binding scope properly 
-    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps, List<Function> newBVFunctions) {
+    public VCExpr ToVC(VCExpressionGenerator gen, Boogie2VCExprTranslator translator, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps, List<Function> newBVFunctions, UniqueNamer namer) {
       Stack<SExpr> todo = new Stack<SExpr>();
       Stack<SExpr> waiting = new Stack<SExpr>();
       Stack<VCExpr> results = new Stack<VCExpr>();
@@ -415,7 +415,16 @@ namespace Microsoft.Boogie
               }
             }
             // identifier
+            Object obj;
+            if (namer.NameToRef.TryGetValue(next.Name, out obj)) {
+              if (obj is VCExprVar) {
+                results.Push((VCExprVar)obj);
+                continue;
+              }
+            }
+            
             bool varFound = false;
+            /*
             foreach (Variable v in scopeVars) {
               if (v.Name.Equals(next.Name)) {
                 results.Push(translator.LookupVariable(v));
@@ -425,7 +434,7 @@ namespace Microsoft.Boogie
             }
             if (varFound) {
               continue;
-            }
+            } */
             foreach (KeyValuePair<string, VCExprVar> kv in boundVars) {
               if (kv.Key.Equals(next.Name)) {
                 results.Push(kv.Value);
@@ -616,6 +625,10 @@ namespace Microsoft.Boogie
                 case "bvcomp":
                   result = new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", Type.GetBvType(1)), false);
                   break;
+                case "bv2nat":
+                case "bv2int":
+                  result = new Formal(Token.NoToken, new TypedIdent(Token.NoToken, "", Type.Int), false);
+                  break;
                 default:
                   throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
               }
@@ -750,6 +763,7 @@ namespace Microsoft.Boogie
               results.Push(gen.BvConcat(args[0], args[1]));
               continue;
             default:
+
               throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
           }
         }

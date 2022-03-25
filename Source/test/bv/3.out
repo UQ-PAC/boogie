@@ -1,0 +1,56 @@
+iteration 1 has A_disjunct size 14, A size 14 and B size 18
+invar candidate: (! (! (== (__bvadd66 (__zero_extend2_64 n) (__bvneg66 (__zero_extend2_64 y))) (__zero_extend2_64 x))))
+iteration 1 has interpolant size 11
+invariant found after 1 iterations,  including 0 concrete steps
+function {:bvbuiltin "bvadd"} bv64add(bv64, bv64) : bv64;
+
+function {:bvbuiltin "bvule"} bv64ule(bv64, bv64) : bool;
+
+function {:bvbuiltin "bvult"} bv64ult(bv64, bv64) : bool;
+
+function {:bvbuiltin "bvslt"} bv64slt(bv64, bv64) : bool;
+
+function {:bvbuiltin "bvsub"} bv64sub(bv64, bv64) : bv64;
+
+procedure test();
+
+
+
+implementation test()
+{
+  var x: bv64;
+  var n: bv64;
+  var y: bv64;
+
+  anon0:
+    assume bv64ule(0bv64, n);
+    x := n;
+    y := 0bv64;
+    goto anon3_LoopHead;
+
+  anon3_LoopHead:  // cut point
+    assert {:inferred} __bvadd66(__zero_extend2_64(n), __bvneg66(__zero_extend2_64(y)))
+       == __zero_extend2_64(x);
+    goto anon3_LoopDone, anon3_LoopBody;
+
+  anon3_LoopBody:
+    assume {:partition} bv64ult(0bv64, x);
+    y := bv64add(y, 1bv64);
+    x := bv64sub(x, 1bv64);
+    goto anon3_LoopHead;
+
+  anon3_LoopDone:
+    assume {:partition} !bv64ult(0bv64, x);
+    assert y == n;
+    return;
+}
+
+
+
+function {:bvbuiltin "zero_extend 2"} __zero_extend2_64(bv64) : bv66;
+
+function {:bvbuiltin "bvneg"} __bvneg66(bv66) : bv66;
+
+function {:bvbuiltin "bvadd"} __bvadd66(bv66, bv66) : bv66;
+
+Boogie program verifier finished with 1 verified, 0 errors

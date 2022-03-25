@@ -840,6 +840,8 @@ namespace Microsoft.Boogie
 
     public bool AggressiveQE = false;
 
+    public bool ManualQE = false;
+
     public string CivlDesugaredFile  { get; set; } = null;
 
     public bool TrustMoverTypes {
@@ -1850,7 +1852,8 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("forwardSqueeze", ref ForwardSqueeze) ||
               ps.CheckBooleanFlag("interpolationSimplify", ref InterpolationSimplify) ||
               ps.CheckBooleanFlag("interpolationProfiling", ref InterpolationProfiling) ||
-              ps.CheckBooleanFlag("aggressiveQE", ref AggressiveQE)
+              ps.CheckBooleanFlag("aggressiveQE", ref AggressiveQE) ||
+              ps.CheckBooleanFlag("manualQE", ref ManualQE)
           )
           {
             // one of the boolean flags matched

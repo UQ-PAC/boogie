@@ -2,12 +2,14 @@ from pathlib import Path
 
 variantDict = {}
 
-variants = ['backwardmathsatqe',
+variants = ['princessqe', 'princessqe2', 'princessqe_rec', 'princessqelong', 'princessqe2long', 'princessqe_reclong']
+
+''' variants = ['backwardmathsatqe',
 'backwardmathsatqe2',
 'backwardmathsatqe_rec',
 'backwardsmtinterpolqe',
 'backwardsmtinterpolqe2',
-'backwardsmtinterpolqe_rec']
+'backwardsmtinterpolqe_rec']''' 
 
 for variant in variants:
   variantDict[variant] = open(variant + '.csv', 'w+')
