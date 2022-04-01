@@ -13,5 +13,5 @@ procedure test() {
   assert (y >= n);
 }
 
-function {:define} increment(a:int) returns(int) { a + 1 }
-//axiom (forall i: int :: (increment(a) == a + 1));
+function increment(a:int) returns(int) {a + 1}
+//axiom (forall i: int :: {increment(i)} (increment(i) == i + 1));

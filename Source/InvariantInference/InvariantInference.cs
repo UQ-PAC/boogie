@@ -41,6 +41,35 @@ namespace Microsoft.Boogie.InvariantInference {
 
       List<Function> newBVFunctions = new List<Function>();
 
+      
+      Dictionary<Function, VCExpr> functionDefs = new Dictionary<Function, VCExpr>();
+
+      // pretty naive, assuming one axiom to instantiate per function at most and only fitting specific forall pattern, but it's a start
+      foreach(Function f in program.Functions) {
+        if (f.Body == null && f.DefinitionBody == null) {
+          if (f.DefinitionAxiom != null) {
+            if (f.DefinitionAxiom.Expr is ForallExpr) {
+              Expr body = ((ForallExpr)f.DefinitionAxiom.Expr).Body;
+              VCExpr forall = prover.Context.BoogieExprTranslator.Translate(f.DefinitionAxiom.Expr);
+              functionDefs.Add(f, forall);
+            }
+          } else {
+            foreach (Axiom a in program.Axioms) {
+              if (a.Expr is ForallExpr) {
+                Expr body = ((ForallExpr)a.Expr).Body;
+                if (ExprContainsFunc.Check(body, f.Name)) {
+                  VCExpr forall = prover.Context.BoogieExprTranslator.Translate(a.Expr);
+                  functionDefs.Add(f, forall);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+     
+
+
       // analyze each procedure
       foreach (var proc in program.Procedures) {
         if (procedureImplementations.ContainsKey(proc)) {
@@ -72,7 +101,7 @@ namespace Microsoft.Boogie.InvariantInference {
                 } else {
                   backEdgeFound = true;
 
-                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, BitVectorOpFunctions, newBVFunctions);
+                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs);
                   VCExpr invariant = inferrer.InferLoopInvariant();
                   Instrument(b, invariant, scopeVars, BitVectorOpFunctions);
                 }
@@ -231,6 +260,32 @@ namespace Microsoft.Boogie.InvariantInference {
       .GroupBy(i => i.Proc).Select(g => g.ToArray()).ToDictionary(a => a[0].Proc);
     }
 
+    class ExprContainsFunc : ReadOnlyVisitor {
+      private string name;
+      private bool contained = false;
+
+      public static bool Check(Expr expr, String name) {
+        ExprContainsFunc checker = new ExprContainsFunc(name);
+        checker.Visit(expr);
+        return checker.contained;
+      }
+
+      public ExprContainsFunc(String name) {
+        this.name = name;
+      }
+      public override Expr VisitNAryExpr(NAryExpr node) {
+        if (node.Fun is FunctionCall) {
+          if (node.Fun.FunctionName == name) {
+            contained = true;
+          }
+          return node;
+        } else {
+          this.VisitExprSeq(node.Args);
+          return node;
+        }
+      }
+    }
+
   }
   public class InvariantInferrer {
 
@@ -245,9 +300,10 @@ namespace Microsoft.Boogie.InvariantInference {
     private List<Function> newBVFunctions;
     private bool aggressiveQE = CommandLineOptions.Clo.AggressiveQE;
     private bool manualQE = CommandLineOptions.Clo.ManualQE;
+    private Dictionary<Function, VCExpr> functionDefs;
 
     public InvariantInferrer(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
-      ProverInterface prover, InterpolationProver interpol, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+      ProverInterface prover, InterpolationProver interpol, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs) {
       this.translator = prover.Context.BoogieExprTranslator;
       this.gen = prover.Context.ExprGen;
       //this.scopeVars = scopeVars;
@@ -257,6 +313,7 @@ namespace Microsoft.Boogie.InvariantInference {
       this.interpol = interpol;
       this.bvOps = bvOps;
       this.newBVFunctions = newBVFunctions;
+      this.functionDefs = functionDefs;
 
     }
     public VCExpr InferLoopInvariant() {
@@ -361,7 +418,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
 
         VCExpr I;
-        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, bvOps, newBVFunctions)) { 
+        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, bvOps, newBVFunctions, functionDefs)) { 
           interpolantiterations++;
 
           VCExpr InvariantCandidate;

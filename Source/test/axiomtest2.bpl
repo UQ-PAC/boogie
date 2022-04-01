@@ -3,7 +3,7 @@ procedure test() {
   var q: int;
   havoc n;
   x := -1;
-  x := increment(x);
+  x := increment2(x);
   y := 0;
   while (x != n) {
       x := x + 1;
@@ -13,5 +13,7 @@ procedure test() {
   assert (y >= n);
 }
 
-function {:define} increment(a:int) returns(int) { a + 1 }
-//axiom (forall i: int :: (increment(a) == a + 1));
+function increment(a:int) returns(int);
+axiom (forall i: int :: (increment(i) == i + 1));
+
+function increment2(a:int) returns(int) {a + 1}

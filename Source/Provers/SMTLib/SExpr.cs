@@ -758,7 +758,14 @@ namespace Microsoft.Boogie
               results.Push(gen.BvConcat(args[0], args[1]));
               continue;
             default:
-
+              // function
+              Object obj;
+              if (namer.NameToRef.TryGetValue(next.Name, out obj)) {
+                if (obj is Function) {
+                  results.Push(gen.Function(gen.BoogieFunctionOp((Function)obj), args));
+                  continue;
+                }
+              }
               throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
           }
         }

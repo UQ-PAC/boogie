@@ -74,9 +74,11 @@ namespace Microsoft.Boogie.SMTLib {
         }
       }
 
+      /*
       foreach (var ax in prog.Axioms) {
         ctx.AddAxiom(ax, null);
       }
+      */
 
       foreach (Declaration decl in prog.TopLevelDeclarations) {
         GlobalVariable v = decl as GlobalVariable;
@@ -106,10 +108,47 @@ namespace Microsoft.Boogie.SMTLib {
 
     // returns false if A && B is satisfiable meaning interpolant can't be found
     // returns true and sets resp to be output from smt solver if interpolant is found
-    public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out VCExpr I, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions) {
+    public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out VCExpr I, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs) {
       Stopwatch stopWatch = new Stopwatch();
       if (CommandLineOptions.Clo.InterpolationProfiling) {
         stopWatch.Start();
+      }
+
+      List<Function> functions = functionDefs.Keys.ToList();
+
+      Dictionary<Function, List<List<VCExpr>>> toInstantiateA = FunctionParametersCollector.Collect(A, functions);
+      Dictionary<Function, List<List<VCExpr>>> toInstantiateB = FunctionParametersCollector.Collect(B, functions);
+
+      foreach (Function f in functions) {
+        List<List<VCExpr>> parameterLists;
+        VCExprQuantifier quantifier = functionDefs[f] as VCExprQuantifier;
+
+        if (toInstantiateA.TryGetValue(f, out parameterLists)) {
+          foreach (List<VCExpr> parameters in parameterLists) {
+            Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
+            for (int i = 0; i < quantifier.BoundVars.Count; i++) {
+              toSubst.Add(quantifier.BoundVars[i], parameters[i]);
+            }
+            VCExprSubstitution subst = new VCExprSubstitution(toSubst, new Dictionary<TypeVariable, Type>());
+            SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
+            VCExpr instantiated = substituter.Mutate(quantifier.Body, subst);
+            A = gen.AndSimp(instantiated, A);
+          }
+        }
+
+        if (toInstantiateB.TryGetValue(f, out parameterLists)) {
+          foreach (List<VCExpr> parameters in parameterLists) {
+            Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
+            for (int i = 0; i < quantifier.BoundVars.Count; i++) {
+              toSubst.Add(quantifier.BoundVars[i], parameters[i]);
+            }
+            VCExprSubstitution subst = new VCExprSubstitution(toSubst, new Dictionary<TypeVariable, Type>());
+            SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
+            VCExpr instantiated = substituter.Mutate(quantifier.Body, subst);
+            B = gen.AndSimp(instantiated, B);
+          }
+        }
+
       }
 
       string AStr;
@@ -252,5 +291,46 @@ namespace Microsoft.Boogie.SMTLib {
     }
 
   }
+
+  public class FunctionParametersCollector : TraversingVCExprVisitor<bool, bool> {
+
+    private List<Function> functions;
+    private Dictionary<Function, List<List<VCExpr>>> functionParameters;
+
+    public FunctionParametersCollector(List<Function> functions) {
+      this.functions = functions;
+      this.functionParameters = new Dictionary<Function, List<List<VCExpr>>>();
+    }
+
+    public static Dictionary<Function, List<List<VCExpr>>> Collect(VCExpr expr, List<Function> functions) {
+      FunctionParametersCollector visitor = new FunctionParametersCollector(functions);
+      visitor.Traverse(expr, true);
+      return visitor.functionParameters;
+    }
+
+    public override bool Visit(VCExprNAry node, bool arg) {
+      if (node.Op is VCExprBoogieFunctionOp) {
+        VCExprBoogieFunctionOp op = node.Op as VCExprBoogieFunctionOp;
+        if (functions.Contains(op.Func)) {
+          List<VCExpr> args = new List<VCExpr>();
+          foreach (VCExpr e in node.UniformArguments) {
+            args.Add(e);
+          }
+          List<List<VCExpr>> collectedParams;
+          if (functionParameters.TryGetValue(op.Func, out collectedParams)) {
+            collectedParams.Add(args);
+          } else {
+            functionParameters.Add(op.Func, new List<List<VCExpr>> { args });
+          }
+        }
+      }
+      return base.Visit(node, arg);
+    }
+
+    protected override bool StandardResult(VCExpr node, bool arg) {
+      return true;
+    }
+  }
+
 }
 
