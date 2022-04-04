@@ -7,6 +7,7 @@ using System.Diagnostics;
 using Microsoft.Boogie.VCExprAST;
 
 namespace Microsoft.Boogie.SMTLib {
+
   public class InterpolationProver : SMTLibProcessTheoremProver {
     private InterpolationProver(SMTLibOptions libOptions, ProverOptions options, VCExpressionGenerator gen, SMTLibProverContext ctx) : base(libOptions, options, gen, ctx) {
 
@@ -74,6 +75,7 @@ namespace Microsoft.Boogie.SMTLib {
         }
       }
 
+      // do not want axioms getting in the way of interpolation problem, add them directly later
       /*
       foreach (var ax in prog.Axioms) {
         ctx.AddAxiom(ax, null);
@@ -108,7 +110,7 @@ namespace Microsoft.Boogie.SMTLib {
 
     // returns false if A && B is satisfiable meaning interpolant can't be found
     // returns true and sets resp to be output from smt solver if interpolant is found
-    public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out VCExpr I, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs) {
+    public bool CalculateInterpolant(VCExpr A, VCExpr B, bool Forward, out VCExpr I, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs, List<VCExpr> QFAxioms) {
       Stopwatch stopWatch = new Stopwatch();
       if (CommandLineOptions.Clo.InterpolationProfiling) {
         stopWatch.Start();
@@ -149,6 +151,12 @@ namespace Microsoft.Boogie.SMTLib {
           }
         }
 
+      }
+
+      // add quantifier-free axioms to both sides
+      foreach (VCExpr axiom in QFAxioms) {
+        A = gen.AndSimp(axiom, A);
+        B = gen.AndSimp(axiom, B);
       }
 
       string AStr;

@@ -1,13 +1,12 @@
 procedure test() {
-  var x: int, n: int where n >= 0, y: int;
+  var x: int, n: int, y: int;
   var q: int;
-  havoc n;
+  assume (n >= 0);
   x := -1;
   x := increment2(x);
   y := 0;
   while (x != n) {
       x := x + 1;
-      //y := y + 1;
       y := increment(y);
   }
   assert (y >= n);

@@ -40,12 +40,26 @@ namespace Microsoft.Boogie.InvariantInference {
       }
 
       List<Function> newBVFunctions = new List<Function>();
-
       
       Dictionary<Function, VCExpr> functionDefs = new Dictionary<Function, VCExpr>();
 
-      // pretty naive, assuming one axiom to instantiate per function at most and only fitting specific forall pattern, but it's a start
-      foreach(Function f in program.Functions) {
+      List<VCExpr> QFAxioms = new List<VCExpr>();
+      
+      foreach (Axiom a in program.Axioms) {
+        ForallCollector collector = new ForallCollector();
+        collector.Visit(a.Expr);
+        List<ForallExpr> foralls = collector.foralls;
+        if (foralls.Count == 0) {
+          QFAxioms.Add(prover.Context.BoogieExprTranslator.Translate(a.Expr));
+        }
+
+        // TODO: deal with triggers more directly using quantifiers in axioms found here, instead of current lookup heuristic
+      }
+
+      // pretty naive & inefficient, assuming one axiom to instantiate per function at most and only fitting specific forall pattern, but it's a start
+      // better for future is to use triggers found with the ForallCollector loop above, but then having to figure out instantiating quantifiers of 
+      // more complex patterns is required
+      foreach (Function f in program.Functions) {
         if (f.Body == null && f.DefinitionBody == null) {
           if (f.DefinitionAxiom != null) {
             if (f.DefinitionAxiom.Expr is ForallExpr) {
@@ -101,7 +115,7 @@ namespace Microsoft.Boogie.InvariantInference {
                 } else {
                   backEdgeFound = true;
 
-                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs);
+                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs, QFAxioms);
                   VCExpr invariant = inferrer.InferLoopInvariant();
                   Instrument(b, invariant, scopeVars, BitVectorOpFunctions);
                 }
@@ -286,6 +300,19 @@ namespace Microsoft.Boogie.InvariantInference {
       }
     }
 
+    class ForallCollector : ReadOnlyVisitor {
+      public List<ForallExpr> foralls;
+
+      public ForallCollector() {
+        this.foralls = new List<ForallExpr>();
+      }
+
+      public override Expr VisitForallExpr(ForallExpr node) {
+        foralls.Add(node);
+        return base.VisitForallExpr(node);
+      }
+    }
+
   }
   public class InvariantInferrer {
 
@@ -301,9 +328,10 @@ namespace Microsoft.Boogie.InvariantInference {
     private bool aggressiveQE = CommandLineOptions.Clo.AggressiveQE;
     private bool manualQE = CommandLineOptions.Clo.ManualQE;
     private Dictionary<Function, VCExpr> functionDefs;
+    private List<VCExpr> QFAxioms;
 
     public InvariantInferrer(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
-      ProverInterface prover, InterpolationProver interpol, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs) {
+      ProverInterface prover, InterpolationProver interpol, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs, List<VCExpr> QFAxioms) {
       this.translator = prover.Context.BoogieExprTranslator;
       this.gen = prover.Context.ExprGen;
       //this.scopeVars = scopeVars;
@@ -314,6 +342,7 @@ namespace Microsoft.Boogie.InvariantInference {
       this.bvOps = bvOps;
       this.newBVFunctions = newBVFunctions;
       this.functionDefs = functionDefs;
+      this.QFAxioms = QFAxioms;
 
     }
     public VCExpr InferLoopInvariant() {
@@ -418,7 +447,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
 
         VCExpr I;
-        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, bvOps, newBVFunctions, functionDefs)) { 
+        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, bvOps, newBVFunctions, functionDefs, QFAxioms)) { 
           interpolantiterations++;
 
           VCExpr InvariantCandidate;
