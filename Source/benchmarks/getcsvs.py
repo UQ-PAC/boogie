@@ -2,7 +2,7 @@ from pathlib import Path
 
 variantDict = {}
 
-variants = ['princessqe', 'princessqe2', 'princessqe_rec', 'princessqelong', 'princessqe2long', 'princessqe_reclong']
+variants = ['princessqe', 'princessqe2', 'princessqe_rec', 'mathsatqe', 'mathsatqe2', 'mathsatqe_rec', 'smtinterpolqe', 'smtinterpolqe2', 'smtinterpolqe_rec',]
 
 ''' variants = ['backwardmathsatqe',
 'backwardmathsatqe2',

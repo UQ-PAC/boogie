@@ -1,8 +1,3 @@
-success,23,18,5,482,8.347
-D:\work\repos\boogie\Source\benchmarks\fib\34.bpl(23,2): Error: This assertion might not hold.
-Execution trace:
-    D:\work\repos\boogie\Source\benchmarks\fib\34.bpl(8,2): anon0
-    D:\work\repos\boogie\Source\benchmarks\fib\34.bpl(13,2): anon4_LoopHead
-    D:\work\repos\boogie\Source\benchmarks\fib\34.bpl(13,2): anon4_LoopDone
+success,22,17,5,640,5.556
 
-Boogie program verifier finished with 0 verified, 1 error
+Boogie program verifier finished with 1 verified, 0 errors

@@ -483,6 +483,16 @@ namespace Microsoft.Boogie
                       results.Push(gen.Function(gen.BoogieFunctionOp(bvFn), BVOpArgs));
                     }
                     continue;
+                  // not actually a bitvector op, just an unrelated parameterised operator, but here's best place to handle it 
+                  case "divisible":
+                    // ((_ divisible n) a) <==> ((a mod n) == 0)
+                    BigNum divisor = BigNum.FromString(BVOp.Arguments[1].Name);
+                    BVOpArgs.Add(gen.Integer(divisor));
+                    List<VCExpr> eqArgs = new List<VCExpr>();
+                    eqArgs.Add(gen.Function(VCExpressionGenerator.ModOp, BVOpArgs));
+                    eqArgs.Add(gen.Integer(BigNum.ZERO));
+                    results.Push(gen.Function(VCExpressionGenerator.EqOp, eqArgs));
+                    continue;
                   default:
                     // others that might need to be handled:
                     // repeat, rotate_left, rotate_right

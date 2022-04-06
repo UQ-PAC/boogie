@@ -1,4 +1,4 @@
-failure,3,1,1,,0.928
+failure,3,1,1,,0.836
 D:\work\repos\boogie\Source\benchmarks\zilu\benchmark52_polynomial.bpl(7,3): Error: This assertion might not hold.
 Execution trace:
     D:\work\repos\boogie\Source\benchmarks\zilu\benchmark52_polynomial.bpl(3,3): anon0

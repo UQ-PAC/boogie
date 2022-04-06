@@ -45,6 +45,8 @@ namespace Microsoft.Boogie.InvariantInference {
 
       List<VCExpr> QFAxioms = new List<VCExpr>();
       
+      // collect all axioms without quantifiers to use in interpolation
+      // in future, could add all axioms with ONLY exists and skolemise them? 
       foreach (Axiom a in program.Axioms) {
         ForallCollector collector = new ForallCollector();
         collector.Visit(a.Expr);
@@ -395,7 +397,8 @@ namespace Microsoft.Boogie.InvariantInference {
       }
 
       List<VCExpr> A = new List<VCExpr> { loopPElim }; //A_0 = P
-      List<VCExpr> B = new List<VCExpr> { gen.AndSimp(NotK, gen.NotSimp(loopQElim)) }; //B_0 = !K && !Q
+      List<VCExpr> B = new List<VCExpr> { gen.NotSimp(loopQElim) };
+      //List<VCExpr> B = new List<VCExpr> { gen.AndSimp(NotK, gen.NotSimp(loopQElim)) }; //B_0 = !K && !Q
 
       bool Forward = CommandLineOptions.Clo.ForwardSqueeze;
       CommandLineOptions.InterpolationDebug DebugLevel = CommandLineOptions.Clo.InterpolationDebugLevel;
@@ -427,9 +430,11 @@ namespace Microsoft.Boogie.InvariantInference {
 
         if (!aggressiveQE) {
           B_rElim = prover.EliminateQuantifiers(B[r], bvOps, newBVFunctions);
-          if (B[r] == B[r]) {
+          
+          if (B[r] == B_rElim) {
             B_rElim = prover.Simplify(B_rElim, bvOps, newBVFunctions);
           }
+          
         }
           //}
 
@@ -525,7 +530,8 @@ namespace Microsoft.Boogie.InvariantInference {
           if (Forward) {
             AExpr = setSP(loopHead, loopHead, gen.AndSimp(I, K), loopBody);
           } else {
-            AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
+            AExpr = setSP(loopHead, loopHead, A[t], loopBody);
+            //AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
           }
           VCExpr AElim = AExpr;
           //if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
@@ -549,7 +555,8 @@ namespace Microsoft.Boogie.InvariantInference {
           if (Forward) {
             B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, setWP(loopHead, loopHead, B[r], loopBody))));
           } else {
-            B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody))));
+            B.Insert(r + 1, gen.OrSimp(I, gen.NotSimp(setWP(loopHead, loopHead, InvariantCandidate, loopBody))));
+            //B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody))));
           }
           r++;
         } else {
@@ -589,7 +596,8 @@ namespace Microsoft.Boogie.InvariantInference {
               t++;
             } else {
               r = concrete;
-              B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, setWP(loopHead, loopHead, B[r], loopBody))));
+              B.Insert(r + 1, gen.OrSimp(B[0], gen.NotSimp(setWP(loopHead, loopHead, gen.NotSimp(B[r]), loopBody))));
+              //B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, setWP(loopHead, loopHead, B[r], loopBody))));
               r++;
             }
             concrete++;

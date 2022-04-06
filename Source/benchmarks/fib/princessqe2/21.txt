@@ -1,1 +1,3 @@
-timeout
+success,5,4,1,203,1.475
+
+Boogie program verifier finished with 1 verified, 0 errors
