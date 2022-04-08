@@ -92,7 +92,7 @@ namespace Microsoft.Boogie.InvariantInference {
           // analyze each implementation of the procedure
           foreach (var impl in procedureImplementations[proc]) {
             // naive attempt at getting variables that may be referred to
-
+            // want variables in terms of original implementation
             IEnumerable<Variable> scopeVars = new List<Variable>();
             scopeVars = scopeVars.Concat(program.GlobalVariables);
             scopeVars = scopeVars.Concat(impl.LocVars);
@@ -108,8 +108,16 @@ namespace Microsoft.Boogie.InvariantInference {
             }
 
             // predecessors are often not up-to-date at this point, surprisingly
-            ConditionGeneration.ResetPredecessors(impl.Blocks); 
-            Graph<Block> g = Program.GraphFromImpl(impl);
+            impl.ComputePredecessorsForBlocks();
+
+            // need copy as we will perform transformations on the loop/s
+            Duplicator duplicator = new Duplicator();
+            Implementation implCopy = duplicator.VisitImplementation(impl);
+
+            // duplicator does not copy predecessors properly
+            implCopy.ComputePredecessorsForBlocks();
+
+            Graph<Block> g = Program.GraphFromImpl(implCopy);
             g.ComputeLoops();
             if (!g.Reducible) {
               throw new Exception("Irreducible flow graphs are unsupported.");
@@ -121,16 +129,19 @@ namespace Microsoft.Boogie.InvariantInference {
             }
             Block loopHead = loopHeads[0];
 
-            HashSet<Block> backEdgeNodes = new HashSet<Block>();
-            foreach (Block head in loopHeads) {
-              foreach (Block backNode in g.BackEdgeNodes(head)) {
-                backEdgeNodes.Add(backNode);
+            List<Block> originalLoopHeads = new List<Block>();
+            foreach (Block orig in impl.Blocks) {
+              foreach (Block b in loopHeads) {
+                if (b.Label == orig.Label) {
+                  originalLoopHeads.Add(orig);
+                }
               }
             }
 
+
             if (CommandLineOptions.Clo.TraceVerify) {
               Console.WriteLine("before flattening multiple loops");
-              ConditionGeneration.EmitImpl(impl, false);
+              ConditionGeneration.EmitImpl(implCopy, false);
             }
 
             if (loopHeads.Count > 1) {
@@ -148,15 +159,18 @@ namespace Microsoft.Boogie.InvariantInference {
               //}
 
               LocalVariable blockVar = new LocalVariable(Token.NoToken, new TypedIdent(Token.NoToken, "_@block", Type.Int));
-              impl.LocVars.Add(blockVar);
+              implCopy.LocVars.Add(blockVar);
               IdentifierExpr blockId = new IdentifierExpr(Token.NoToken, blockVar);
               int id = 0;
               HashSet<Block> loopHeadSuccessors = new HashSet<Block>();
               // we are counting any edge to a loop head from within or after a loop as a back edge, as it needs to become a back edge as part of this transformation
               // this is different to existing back edges found in graph
               HashSet<Block> loopBodyBackEdgeNodes = new HashSet<Block>();
+              Dictionary<string, int> loopLabelIds = new Dictionary<String, int>();
               foreach (Block head in g.Headers) {
+                loopLabelIds.Add(head.Label, id);
                 LiteralExpr idLiteral = new LiteralExpr(Token.NoToken, BigNum.FromInt(id));
+
                 foreach (Block successor in head.Exits()) {
                   loopHeadSuccessors.Add(successor);
                   // at start of every block that a loophead points to, add assume for that loophead's block value (can be cleverer about this if needed & directly and with existing assumes?)
@@ -171,16 +185,17 @@ namespace Microsoft.Boogie.InvariantInference {
                       loopBodyBackEdgeNodes.Add(predecessor);
                       break;
                     }
-                  } 
+                  }
                   // before each goto to a loophead(forward or back), assign block variable with value for destination block
                   predecessor.Cmds.Add(Cmd.SimpleAssign(Token.NoToken, blockId, idLiteral));
                 }
                 id++;
               }
+
               // create new block that merges all loopheads - goto all possible locations from a loophead
               GotoCmd UnifiedHeadGoto = new GotoCmd(Token.NoToken, loopHeadSuccessors.ToList());
               Block UnifiedLoopHead = new Block(Token.NoToken, "UnifiedLoopHead", new List<Cmd>(), UnifiedHeadGoto);
-              impl.Blocks.Add(UnifiedLoopHead);
+              implCopy.Blocks.Add(UnifiedLoopHead);
 
               // need to take into account case where loophead is not empty - deal with later
               // another thing to handle - multiple exits from loop - unify them!
@@ -193,7 +208,7 @@ namespace Microsoft.Boogie.InvariantInference {
               blockBounds.Typecheck(new TypecheckingContext(null));
               AssertCmd assertBlockBounds = new AssertCmd(Token.NoToken, blockBounds);
               Block UnifiedLoopBack = new Block(Token.NoToken, "UnifiedLoopBack", new List<Cmd> { assertBlockBounds }, UnifiedBackGoto);
-              impl.Blocks.Add(UnifiedLoopBack);
+              implCopy.Blocks.Add(UnifiedLoopBack);
 
               foreach (Block head in g.Headers) {
                 foreach (Block predecessor in head.Predecessors) {
@@ -208,9 +223,9 @@ namespace Microsoft.Boogie.InvariantInference {
                     transfer.AddTarget(UnifiedLoopHead);
                   }
                 }
-                impl.Blocks.Remove(head);
+                implCopy.Blocks.Remove(head);
               }
-              ConditionGeneration.ResetPredecessors(impl.Blocks);
+              implCopy.ComputePredecessorsForBlocks();
 
               if (CommandLineOptions.Clo.TraceVerify) {
                 Console.WriteLine("after flattening multiple loops");
@@ -218,16 +233,52 @@ namespace Microsoft.Boogie.InvariantInference {
               }
 
               loopHead = UnifiedLoopHead;
+
+              // add block var to original
+              foreach (Block b in originalLoopHeads) {
+
+                int bId = loopLabelIds[b.Label];
+                // block is a loop head
+                LiteralExpr idLiteral = new LiteralExpr(Token.NoToken, BigNum.FromInt(bId));
+
+                // add invariant for each loophead representing its value
+                Expr invar = Expr.Eq(blockId, idLiteral);
+                b.Cmds.Insert(0, new AssertCmd(Token.NoToken, invar));
+
+                foreach (Block successor in b.Exits()) {
+                  // at start of every block that a loophead points to, add assume for that loophead's block value (can be cleverer about this if needed & directly and with existing assumes?)
+                  var kv = new QKeyValue(Token.NoToken, "partition", new List<object>(), null);
+                  Expr e = Expr.Eq(blockId, idLiteral);
+                  successor.Cmds.Insert(0, new AssumeCmd(Token.NoToken, e, kv));
+                }
+                foreach (Block predecessor in b.Predecessors) {
+                  // before each goto to a loophead(forward or back), assign block variable with value for destination block
+                  predecessor.Cmds.Add(Cmd.SimpleAssign(Token.NoToken, blockId, idLiteral));
+                }
+
+              }
+
+              impl.LocVars.Add(blockVar);
             }
-            InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, loopHead, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs, QFAxioms);
-            //try {
+
+            InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, implCopy, loopHead, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs, QFAxioms);
+            if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.Stats ||
+              CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.None) {
+              try {
+                VCExpr invariant = inferrer.InferLoopInvariant();
+                Instrument(originalLoopHeads, invariant, scopeVars, BitVectorOpFunctions);
+              } catch {
+                // do clean up if execution is thrown and we're not debugging
+                prover.Close();
+                interpol.Close();
+                throw;
+              }
+            } else {
+              // have to manually clean up if debugging so that stack trace is visible
               VCExpr invariant = inferrer.InferLoopInvariant();
-              Instrument(loopHead, invariant, scopeVars, BitVectorOpFunctions);
-            //} catch {
-            //  prover.Close();
-            //  interpol.Close();
-            //  throw;
-            //}
+              Instrument(originalLoopHeads, invariant, scopeVars, BitVectorOpFunctions);
+            }
+
           }
         }
       }
@@ -237,17 +288,14 @@ namespace Microsoft.Boogie.InvariantInference {
 
     }
 
-    private static void Instrument(Block b, VCExpr invariant, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps) {
+    private static void Instrument(List<Block> loopHeads, VCExpr invariant, IEnumerable<Variable> scopeVars, SortedDictionary<(string op, int size), Function> bvOps) {
       // need to translate VCExpr back into Expr - kind of terrible
       Expr inv = VCtoExpr(invariant, scopeVars, bvOps);
-      List<Cmd> newCommands = new List<Cmd>();
-      PredicateCmd cmd;
       var kv = new QKeyValue(Token.NoToken, "inferred", new List<object>(), null);
-      cmd = new AssertCmd(Token.NoToken, inv, kv);
-
-      newCommands.Add(cmd);
-      newCommands.AddRange(b.Cmds);
-      b.Cmds = newCommands;
+      PredicateCmd cmd = new AssertCmd(Token.NoToken, inv, kv);
+      foreach (Block b in loopHeads) {
+        b.cmds.Insert(0, cmd);
+      }
     }
 
     // more robust would be to use visitor?

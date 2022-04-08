@@ -20,8 +20,6 @@ procedure read() returns (y: int, Gamma_y: bool)
     call rely();
     assert Gamma_r1;
     while (r1 mod 2 != 0)
-    invariant r1 + -2 * int(1 / 2 * real(r1)) != 0 || (Gamma_r1 && Gamma_x);
-    // _@block == 0
         //invariant r1 <= z;
         //invariant Gamma_r1;
     {
@@ -35,8 +33,6 @@ procedure read() returns (y: int, Gamma_y: bool)
     call rely();
     assert Gamma_z && Gamma_r1;
     while (z != r1)
-    invariant Gamma_r2;
-    //invariant _@block == 2
         //invariant r1 mod 2 == 0;
         //invariant r1 <= old_z && old_z <= z;
         //invariant old_z mod 2 == 0 ==> Gamma_r2;
@@ -46,8 +42,6 @@ procedure read() returns (y: int, Gamma_y: bool)
         call rely();
         assert Gamma_r1;
         while (r1 mod 2 != 0)
-        invariant r1 + -2 * int(1 / 2 * real(r1)) != 0 || (Gamma_r1 && Gamma_x);
-        // invariant _@block == 1
             //invariant r1 <= z;
         {
             call rely();
