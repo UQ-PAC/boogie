@@ -615,7 +615,7 @@ namespace VC
       #endregion
     }
 
-    internal static void ResetPredecessors(List<Block> blocks)
+    public static void ResetPredecessors(List<Block> blocks)
     {
       Contract.Requires(blocks != null);
       foreach (Block b in blocks)

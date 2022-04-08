@@ -27,14 +27,14 @@ procedure read() returns (y: int, Gamma_y: bool)
 
     // assume Gamma_r1 && Gamma_z && r1 <= z && block == 0 && block2 == 0 && z % 2 == 0 ==> Gamma_x;
     while (block2 != -1)
-        invariant r1 <= z;
-        invariant Gamma_r1;
-        invariant block2 == 1 && block == 0 ==> r1 mod 2 == 0 && r1 <= old_z && old_z <= z;
-        invariant block2 == 1 && block == 0 ==> (old_z mod 2 == 0 ==> Gamma_r2);
-        invariant block == -1 ==> z == r1;
-        invariant block == -1 ==> Gamma_r2;
-        invariant block2 == -1 ==> block == -1;
-        invariant block2 == 0 ==> block != -1;
+        //invariant r1 <= z;
+        //invariant Gamma_r1;
+        //invariant block2 == 1 && block == 0 ==> r1 mod 2 == 0 && r1 <= old_z && old_z <= z;
+        //invariant block2 == 1 && block == 0 ==> (old_z mod 2 == 0 ==> Gamma_r2);
+        //invariant block == -1 ==> z == r1;
+       // invariant block == -1 ==> Gamma_r2;
+       // invariant block2 == -1 ==> block == -1;
+      //  invariant block2 == 0 ==> block != -1;
     {
         if (block2 == 0) {
             if ((r1 mod 2) != 0) {

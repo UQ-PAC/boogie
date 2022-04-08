@@ -7,13 +7,13 @@ using System.Diagnostics.Contracts;
 using Microsoft.Boogie.VCExprAST;
 using Microsoft.Boogie.SMTLib;
 using Microsoft.BaseTypes;
+using Microsoft.Boogie.GraphUtil;
+using VC;
 
 namespace Microsoft.Boogie.InvariantInference {
   public class InvariantInference {
 
     public static void RunInvariantInference(Program program) {
-      // find back edges
-      WidenPoints.Compute(program);
       Dictionary<Procedure, Implementation[]> procedureImplementations = ComputeProcImplMap(program);
 
       ProverInterface prover = ProverInterface.CreateProver(program, CommandLineOptions.Clo.ProverLogFilePath,
@@ -91,9 +91,6 @@ namespace Microsoft.Boogie.InvariantInference {
         if (procedureImplementations.ContainsKey(proc)) {
           // analyze each implementation of the procedure
           foreach (var impl in procedureImplementations[proc]) {
-            // find back edge & check only one back edge per procedure implementation
-            bool backEdgeFound = false;
-
             // naive attempt at getting variables that may be referred to
 
             IEnumerable<Variable> scopeVars = new List<Variable>();
@@ -109,24 +106,133 @@ namespace Microsoft.Boogie.InvariantInference {
                 }
               }
             }
-            foreach (Block b in impl.Blocks) {
-              if (b.widenBlock) {
-                if (backEdgeFound) {
-                  // error, multiple back edges might be able to handled by creating a unified exit block 
-                  throw new NotImplementedException("cannot handle multiple back edges");
-                } else {
-                  backEdgeFound = true;
 
-                  InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, b, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs, QFAxioms);
-                  VCExpr invariant = inferrer.InferLoopInvariant();
-                  Instrument(b, invariant, scopeVars, BitVectorOpFunctions);
-                }
+            // predecessors are often not up-to-date at this point, surprisingly
+            ConditionGeneration.ResetPredecessors(impl.Blocks); 
+            Graph<Block> g = Program.GraphFromImpl(impl);
+            g.ComputeLoops();
+            if (!g.Reducible) {
+              throw new Exception("Irreducible flow graphs are unsupported.");
+            }
+
+            List<Block> loopHeads = g.Headers.ToList();
+            if (loopHeads.Count == 0) {
+              continue;
+            }
+            Block loopHead = loopHeads[0];
+
+            HashSet<Block> backEdgeNodes = new HashSet<Block>();
+            foreach (Block head in loopHeads) {
+              foreach (Block backNode in g.BackEdgeNodes(head)) {
+                backEdgeNodes.Add(backNode);
               }
             }
+
+            if (CommandLineOptions.Clo.TraceVerify) {
+              Console.WriteLine("before flattening multiple loops");
+              ConditionGeneration.EmitImpl(impl, false);
+            }
+
+            if (loopHeads.Count > 1) {
+              // do we need to insert new start block first?
+              /*
+              impl.Blocks.Insert(0,
+                new Block(new Token(-17, -4), "0", new List<Cmd>(),
+                  new GotoCmd(Token.NoToken, new List<String> { impl.Blocks[0].Label }, new List<Block> { impl.Blocks[0] })));
+              impl.Blocks[1].Predecessors.Add(impl.Blocks[0]);
+              */
+
+              //if (CommandLineOptions.Clo.TraceVerify) {
+              //  Console.WriteLine("before flattening multiple loops");
+              //  ConditionGeneration.EmitImpl(impl, false);
+              //}
+
+              LocalVariable blockVar = new LocalVariable(Token.NoToken, new TypedIdent(Token.NoToken, "_@block", Type.Int));
+              impl.LocVars.Add(blockVar);
+              IdentifierExpr blockId = new IdentifierExpr(Token.NoToken, blockVar);
+              int id = 0;
+              HashSet<Block> loopHeadSuccessors = new HashSet<Block>();
+              // we are counting any edge to a loop head from within or after a loop as a back edge, as it needs to become a back edge as part of this transformation
+              // this is different to existing back edges found in graph
+              HashSet<Block> loopBodyBackEdgeNodes = new HashSet<Block>();
+              foreach (Block head in g.Headers) {
+                LiteralExpr idLiteral = new LiteralExpr(Token.NoToken, BigNum.FromInt(id));
+                foreach (Block successor in head.Exits()) {
+                  loopHeadSuccessors.Add(successor);
+                  // at start of every block that a loophead points to, add assume for that loophead's block value (can be cleverer about this if needed & directly and with existing assumes?)
+                  var kv = new QKeyValue(Token.NoToken, "partition", new List<object>(), null);
+                  Expr e = Expr.Eq(blockId, idLiteral);
+                  e.Typecheck(new TypecheckingContext(null));
+                  successor.Cmds.Insert(0, new AssumeCmd(Token.NoToken, e, kv));
+                }
+                foreach (Block predecessor in head.Predecessors) {
+                  foreach (Block head2 in g.SortHeadersByDominance()) {
+                    if (g.DominatorMap.DominatedBy(predecessor, head2)) {
+                      loopBodyBackEdgeNodes.Add(predecessor);
+                      break;
+                    }
+                  } 
+                  // before each goto to a loophead(forward or back), assign block variable with value for destination block
+                  predecessor.Cmds.Add(Cmd.SimpleAssign(Token.NoToken, blockId, idLiteral));
+                }
+                id++;
+              }
+              // create new block that merges all loopheads - goto all possible locations from a loophead
+              GotoCmd UnifiedHeadGoto = new GotoCmd(Token.NoToken, loopHeadSuccessors.ToList());
+              Block UnifiedLoopHead = new Block(Token.NoToken, "UnifiedLoopHead", new List<Cmd>(), UnifiedHeadGoto);
+              impl.Blocks.Add(UnifiedLoopHead);
+
+              // need to take into account case where loophead is not empty - deal with later
+              // another thing to handle - multiple exits from loop - unify them!
+
+              // create new block to collect all backedges and point to unified loophead
+              GotoCmd UnifiedBackGoto = new GotoCmd(Token.NoToken, new List<Block> { UnifiedLoopHead });
+              // assert @block >= 0 && @block < loopHeadCount
+
+              Expr blockBounds = Expr.And(Expr.Ge(blockId, new LiteralExpr(Token.NoToken, BigNum.ZERO)), Expr.Lt(blockId, new LiteralExpr(Token.NoToken, BigNum.FromInt(id))));
+              blockBounds.Typecheck(new TypecheckingContext(null));
+              AssertCmd assertBlockBounds = new AssertCmd(Token.NoToken, blockBounds);
+              Block UnifiedLoopBack = new Block(Token.NoToken, "UnifiedLoopBack", new List<Cmd> { assertBlockBounds }, UnifiedBackGoto);
+              impl.Blocks.Add(UnifiedLoopBack);
+
+              foreach (Block head in g.Headers) {
+                foreach (Block predecessor in head.Predecessors) {
+                  GotoCmd transfer = predecessor.TransferCmd as GotoCmd;
+                  transfer.labelTargets.Remove(head);
+                  transfer.labelNames.Remove(head.Label);
+                  if (loopBodyBackEdgeNodes.Contains(predecessor)) {
+                    // replace all loophead gotos from within the loop body with goto backedge collect block
+                    transfer.AddTarget(UnifiedLoopBack);
+                  } else {
+                    // replace all loophead gotos from before the loop goto unified loophead block
+                    transfer.AddTarget(UnifiedLoopHead);
+                  }
+                }
+                impl.Blocks.Remove(head);
+              }
+              ConditionGeneration.ResetPredecessors(impl.Blocks);
+
+              if (CommandLineOptions.Clo.TraceVerify) {
+                Console.WriteLine("after flattening multiple loops");
+                ConditionGeneration.EmitImpl(impl, false);
+              }
+
+              loopHead = UnifiedLoopHead;
+            }
+            InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, impl, loopHead, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs, QFAxioms);
+            //try {
+              VCExpr invariant = inferrer.InferLoopInvariant();
+              Instrument(loopHead, invariant, scopeVars, BitVectorOpFunctions);
+            //} catch {
+            //  prover.Close();
+            //  interpol.Close();
+            //  throw;
+            //}
           }
         }
       }
- 
+      prover.Close();
+      interpol.Close();
       program.AddTopLevelDeclarations(newBVFunctions);
 
     }
@@ -387,14 +493,8 @@ namespace Microsoft.Boogie.InvariantInference {
       }
 
       // squeezing algorithm
-      VCExpr K = getLoopGuard(loopBody); // guard 
-      VCExpr NotK;
-      if (K == null) {
-        K = VCExpressionGenerator.True;
-        NotK = VCExpressionGenerator.True;
-      } else {
-        NotK = gen.NotSimp(K);
-      }
+      
+      VCExpr K = getLoopGuard(loopBody); // guard, now only used for induction, hopefully can be removed there too because it's annoying
 
       List<VCExpr> A = new List<VCExpr> { loopPElim }; //A_0 = P
       List<VCExpr> B = new List<VCExpr> { gen.NotSimp(loopQElim) };
@@ -434,7 +534,7 @@ namespace Microsoft.Boogie.InvariantInference {
           if (B[r] == B_rElim) {
             B_rElim = prover.Simplify(B_rElim, bvOps, newBVFunctions);
           }
-          
+          B[r] = B_rElim;
         }
           //}
 
@@ -528,7 +628,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
           VCExpr AExpr;
           if (Forward) {
-            AExpr = setSP(loopHead, loopHead, gen.AndSimp(I, K), loopBody);
+            AExpr = setSP(loopHead, loopHead, I, loopBody);
           } else {
             AExpr = setSP(loopHead, loopHead, A[t], loopBody);
             //AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
@@ -553,7 +653,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
 
           if (Forward) {
-            B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, setWP(loopHead, loopHead, B[r], loopBody))));
+            B.Insert(r + 1, gen.OrSimp(B[0], gen.NotSimp(setWP(loopHead, loopHead, gen.NotSimp(B[r]), loopBody))));
           } else {
             B.Insert(r + 1, gen.OrSimp(I, gen.NotSimp(setWP(loopHead, loopHead, InvariantCandidate, loopBody))));
             //B.Insert(r + 1, gen.OrSimp(I, gen.AndSimp(K, setWP(loopHead, loopHead, I, loopBody))));
@@ -579,7 +679,7 @@ namespace Microsoft.Boogie.InvariantInference {
             backtracks++; 
             if (Forward) {
               t = concrete;
-              VCExpr AExpr = setSP(loopHead, loopHead, gen.AndSimp(A[t], K), loopBody);
+              VCExpr AExpr = setSP(loopHead, loopHead, A[t], loopBody);
               VCExpr AElim = AExpr;
               // if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
               //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
@@ -613,21 +713,35 @@ namespace Microsoft.Boogie.InvariantInference {
     // naive implementation, will surely need to make more sophisticated, just expects loop guard to be in assume statement at start of second block of any loop path
     // works in cases transformed directly from while loop, but might have issues with assembly-level unstructured code?
     private VCExpr getLoopGuard(HashSet<Block> loopBody) {
-      GotoCmd successors = (GotoCmd)loopHead.TransferCmd;
-      if (successors.labelTargets != null) {
-        foreach (Block nextBlock in successors.labelTargets) {
-          if (loopBody.Contains(nextBlock)) {
-            if (nextBlock.Cmds.Count > 0) {
-              if (nextBlock.Cmds[0] is AssumeCmd) {
-                AssumeCmd ac = (AssumeCmd)nextBlock.Cmds[0];
-                return translator.Translate(ac.Expr);
-              }
+      List<VCExpr> loopGuards = new List<VCExpr>();
+      foreach (Block nextBlock in loopHead.Exits()) {
+        if (loopBody.Contains(nextBlock)) {
+          List<VCExpr> blockGuards = new List<VCExpr>();
+          foreach (Cmd c in nextBlock.Cmds) {
+            AssumeCmd a = c as AssumeCmd;
+            if (a != null) {
+              blockGuards.Add(translator.Translate(a.Expr));
+            } else {
+              break;
             }
+          }
+          VCExpr blockGuard = VCExpressionGenerator.True;
+          foreach (VCExpr g in blockGuards) {
+            blockGuard = gen.AndSimp(blockGuard, g);
+          }
+          if (blockGuard != VCExpressionGenerator.True) {
+            loopGuards.Add(blockGuard);
           }
         }
       }
-      // case where loop exit is non-deterministic - no guard exists
-      return null;
+      VCExpr loopGuard = VCExpressionGenerator.False;
+      foreach (VCExpr g in loopGuards) {
+        loopGuard = gen.OrSimp(loopGuard, g);
+      }
+      if (loopGuards.Count == 0) {
+        loopGuard = VCExpressionGenerator.True;
+      }
+      return loopGuard;
     }
 
     private bool satisfiable(VCExpr predicate) {
@@ -644,7 +758,6 @@ namespace Microsoft.Boogie.InvariantInference {
     }
 
     private bool isInductive(VCExpr invarCandidate, HashSet<Block> loopBody, VCExpr guard) {
-      Boogie2VCExprTranslator translator = prover.Context.BoogieExprTranslator;
       VCExpressionGenerator gen = prover.Context.ExprGen;
       VCExpr loopBodyWP = setWP(loopHead, loopHead, invarCandidate, loopBody);
       VCExpr imp = gen.ImpliesSimp(gen.AndSimp(invarCandidate, guard), loopBodyWP); 
@@ -704,22 +817,18 @@ namespace Microsoft.Boogie.InvariantInference {
       }
 
       // case 3. We visit a node with successors => continue the exploration of its successors
-      GotoCmd successors = (GotoCmd)block.TransferCmd;
-
-      if (successors.labelTargets != null) {
-        bool firstSuccessor = false;
-        List<Block> branchPoint = paths.Last().ToList();
-        foreach (Block nextBlock in successors.labelTargets) {
-          if (nextBlock != target) {
-            if (!firstSuccessor) {
-              firstSuccessor = true;
-            } else {
-              // create new path for new branch
-              paths.Add(branchPoint.ToList());
-            }
-            paths.Last().Add(nextBlock);
-            DoDFSVisit(nextBlock, target, paths);
+      bool firstSuccessor = false;
+      List<Block> branchPoint = paths.Last().ToList();
+      foreach (Block nextBlock in block.Exits()) {
+        if (nextBlock != target) {
+          if (!firstSuccessor) {
+            firstSuccessor = true;
+          } else {
+            // create new path for new branch
+            paths.Add(branchPoint.ToList());
           }
+          paths.Last().Add(nextBlock);
+          DoDFSVisit(nextBlock, target, paths);
         }
       }
     }
@@ -739,22 +848,18 @@ namespace Microsoft.Boogie.InvariantInference {
       }
 
       // case 3. We visit a node with successors => continue the exploration of its successors
-      GotoCmd successors = (GotoCmd)block.TransferCmd;
-
-      if (successors.labelTargets != null) { 
-        bool firstSuccessor = false;
-        List<Block> branchPoint = paths.Last().ToList();
-        foreach (Block nextBlock in successors.labelTargets) {
-          if (nextBlock != loopHead) {
-            if (!firstSuccessor) {
-              firstSuccessor = true;
-            } else {
-              // create new path for new branch
-              paths.Add(branchPoint.ToList());
-            }
-            paths.Last().Add(nextBlock); // don't want target in path
-            DoDFSVisitLoop(nextBlock, paths);
+      bool firstSuccessor = false;
+      List<Block> branchPoint = paths.Last().ToList();
+      foreach (Block nextBlock in block.Exits()) {
+        if (nextBlock != loopHead) {
+          if (!firstSuccessor) {
+            firstSuccessor = true;
+          } else {
+            // create new path for new branch
+            paths.Add(branchPoint.ToList());
           }
+          paths.Last().Add(nextBlock); // don't want target in path
+          DoDFSVisitLoop(nextBlock, paths);
         }
       }
     }
@@ -809,13 +914,9 @@ namespace Microsoft.Boogie.InvariantInference {
 
       while (toTry.Count != 0) {
         Block currentBlock = toTry.Dequeue();
-        GotoCmd successors = currentBlock.TransferCmd as GotoCmd;
         VCExpr blockQ_In = VCExpressionGenerator.True;
         bool successorsDone = true;
-        if (successors.labelTargets.Count == 0) {
-          blockQ_In = VCExpressionGenerator.True;
-        }
-        foreach (Block successor in successors.labelTargets) {
+        foreach (Block successor in currentBlock.Exits()) {
           if (blocks.Contains(successor) && currentBlock != successor) {
             if (blockWPs.ContainsKey(successor)) {
               blockQ_In = gen.AndSimp(blockWPs[successor], blockQ_In);
@@ -854,8 +955,7 @@ namespace Microsoft.Boogie.InvariantInference {
       Queue<Block> toTry = new Queue<Block>();
       blockSPs.Add(initial, blockSP(initial, P_In));
 
-      GotoCmd successors = initial.TransferCmd as GotoCmd;
-      foreach (Block successor in successors.labelTargets) {
+      foreach (Block successor in initial.Exits()) {
         if (blocks.Contains(successor)) {
           toTry.Enqueue(successor);
         }
@@ -895,8 +995,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
 
         blockSPs.Add(currentBlock, blockSP(currentBlock, blockP_In));
-        successors = currentBlock.TransferCmd as GotoCmd;
-        foreach (Block successor in successors.labelTargets) {
+        foreach (Block successor in currentBlock.Exits()) {
           if (blocks.Contains(successor) && (!blockSPs.ContainsKey(successor) || successor == target)) {
             toTry.Enqueue(successor);
           }
@@ -961,9 +1060,11 @@ namespace Microsoft.Boogie.InvariantInference {
         VCExpr A = translator.Translate(ac.Expr);
 
         // handles edge case where loop has no postcondition - instead use last assertion as base case 
+        /*
         if (Q == VCExpressionGenerator.False) {
           return gen.NotSimp(A);
         }
+        */
 
         return gen.AndSimp(A, Q);
       } else if (cmd is AssumeCmd) {
