@@ -229,7 +229,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
               if (CommandLineOptions.Clo.TraceVerify) {
                 Console.WriteLine("after flattening multiple loops");
-                ConditionGeneration.EmitImpl(impl, false);
+                ConditionGeneration.EmitImpl(implCopy, false);
               }
 
               loopHead = UnifiedLoopHead;
