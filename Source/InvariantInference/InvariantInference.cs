@@ -572,7 +572,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
         iterations++;
 
-        VCExpr ADisjunct = listDisjunction(A);
+        VCExpr ADisjunct = listDisjunction(A, t);
         VCExpr B_rElim = B[r];
         //if (CommandLineOptions.Clo.InterpolantSolverKind != CommandLineOptions.InterpolantSolver.Princess) {
 
@@ -814,9 +814,9 @@ namespace Microsoft.Boogie.InvariantInference {
       return satisfiable(imp);
     }
 
-    private VCExpr listDisjunction(List<VCExpr> list) {
+    private VCExpr listDisjunction(List<VCExpr> list, int t) {
       VCExpr disjunction = list[0];
-      for (int i = 1; i < list.Count; i++) {
+      for (int i = 1; i <= t; i++) {
         disjunction = gen.OrSimp(disjunction, list[i]);
       }
       return disjunction;

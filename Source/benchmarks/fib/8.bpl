@@ -9,16 +9,13 @@ procedure fib8()
     if (*) {
       x := x + 1;
       y := y + 1;
-    } else {
-      
-      if (*) {
-        if (x >= 4) {
-          x := x + 1;
-          y := y + 1;
-        }
-        if (x < 0) {
-          y := y + 1;
-        }
+    } else if (*) {
+      if (x >= 4) {
+        x := x + 1;
+        y := y + 1;
+      }
+      if (x < 0) {
+        y := y + 1;
       }
     }
     

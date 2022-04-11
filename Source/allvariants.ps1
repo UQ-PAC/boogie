@@ -1,23 +1,23 @@
 function RunBoogie {
 
   param (
-    $f, $folder, $timeoutSeconds, $qe, $solver, [switch] $aggressive
+    $f, $folder, $timeoutSeconds, $qe, $solver, [switch] $forward
   )
   
-  if ($aggressive) {
-    $aggressiveQE = " /aggressiveQE"
-    $aggressiveout = "aggressive"
+  if ($forward) {
+    $forwardflag = " /forwardSqueeze"
+    $forwardout = "forward"
   } else {
-    $aggressiveQE = ""
-    $aggressiveout = ""
+    $forwardflag = ""
+    $forwardout = ""
   }
 
-  if (!(Test-Path -path ($folder + $solver + $qe + $aggressiveout + "\"))) {
-    New-Item -ItemType Directory -Force -Path ($folder + $solver + $qe + $aggressiveout + "\")
+  if (!(Test-Path -path ($folder + $solver + $qe + $forwardout + "\"))) {
+    New-Item -ItemType Directory -Force -Path ($folder + $solver + $qe + $forwardout + "\")
   }
 
-  $boogieArgs = $aggressiveQE + " /interpolationQE:" + $qe + " /interpolationDebug:3 /inferInterpolant:" + $solver + " " + $f.FullName
-  $outfile = $folder + $solver + $qe + $aggressiveout + "\" + ($f.Name -replace "\..+") + ".txt"
+  $boogieArgs = $forwardflag + " /interpolationQE:" + $qe + " /interpolationDebug:3 /inferInterpolant:" + $solver + " " + $f.FullName
+  $outfile = $folder + $solver + $qe + $forwardout + "\" + ($f.Name -replace "\..+") + ".txt"
   if (!(Test-Path $outfile)) {
     $proc = Start-Process -FilePath "BoogieDriver/bin/Debug/net5.0/BoogieDriver.exe" -NoNewWindow -PassThru -ArgumentList $boogieArgs -RedirectStandardOutput $outfile
     $proc | Wait-Process -Timeout $timeoutSeconds -ErrorAction SilentlyContinue -ErrorVariable timeouted
@@ -59,22 +59,13 @@ $files = Get-ChildItem ($folder + "*") -File -Include "*.bpl"
 $timeoutseconds = 60
 
 foreach ($f in $files) {
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "mathsat" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "mathsat" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "mathsat" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "smtinterpol" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "smtinterpol" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "smtinterpol" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "princess" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "princess" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "princess" -aggressive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "mathsat"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "mathsat"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "mathsat"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "smtinterpol"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "smtinterpol"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "smtinterpol"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "princess"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "princess"
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "princess"
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "mathsat" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "mathsat" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "mathsat" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "smtinterpol" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "smtinterpol" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "smtinterpol" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "princess" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe2" -solver "princess" -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe_rec" -solver "princess" -forward
 }
