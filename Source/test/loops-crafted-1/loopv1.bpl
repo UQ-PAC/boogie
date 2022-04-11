@@ -5,8 +5,7 @@ procedure main() {
   i := 0;
   j := 0;
   while(i<n){ 
-    havoc u; 
-    if(u) {	  
+    if(*) {	  
       i := i + 6; 
     } else {
       i := i + 3;    
