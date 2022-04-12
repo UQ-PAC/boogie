@@ -3,13 +3,8 @@ procedure main ()
   var MAXPATHLEN: int;
   var pathbuf_off: int;
 
-  /* Char *bound := pathbuf + sizeof(pathbuf)/sizeof(*pathbuf) - 1;
- */
   var bound_off: int;
 
-  /* glob2's local vars */
-  /* Char *p;
- */
   var glob2_p_off: int;
   var glob2_pathbuf_off: int;
   var glob2_pathlim_off: int;

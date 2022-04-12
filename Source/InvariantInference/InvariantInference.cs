@@ -512,7 +512,7 @@ namespace Microsoft.Boogie.InvariantInference {
       List<VCExpr> B = new List<VCExpr> { gen.NotSimp(loopQElim) };
       //List<VCExpr> B = new List<VCExpr> { gen.AndSimp(gen.NotSimp(K), gen.NotSimp(loopQElim)) }; //B_0 = !K && !Q
 
-      bool Forward = CommandLineOptions.Clo.ForwardSqueeze;
+      bool Forward = CommandLineOptions.Clo.InterpolationDirection == CommandLineOptions.Direction.Forward;
       CommandLineOptions.InterpolationDebug DebugLevel = CommandLineOptions.Clo.InterpolationDebugLevel;
       int t = 0;
       int r = 0;

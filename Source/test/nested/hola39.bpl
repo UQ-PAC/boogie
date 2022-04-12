@@ -24,16 +24,14 @@ procedure hola39() {
 
   while (true) {
     if (glob3_pathend_off + glob3_dc >= glob3_pathlim_off) {
-      goto END;
+      break;
     } else {
       glob3_dc := glob3_dc + 1;
       assert(0 <= glob3_dc);
       assert(glob3_dc < MAXPATHLEN + 1);
       if (*) {
-        goto END;
+        break;
       }
     }
   }
-  END:
-  return;
 }

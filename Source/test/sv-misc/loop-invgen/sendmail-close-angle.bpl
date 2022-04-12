@@ -5,7 +5,6 @@ procedure main ()
   var bufferlen: int;
   var buf: int;
   var buflim: int;
-  var u: bool;
 
   assume(bufferlen >1);
   assume(inlen > 0);
@@ -15,8 +14,11 @@ procedure main ()
   in := 0;
   buflim := bufferlen - 2;
 
-  while(u && (buf != buflim))
+  while(*)
   {
+    if (buf == buflim) {
+      break;
+    }
     assert(0<=buf);
     assert(buf<bufferlen);
   
@@ -24,12 +26,11 @@ procedure main ()
     in := in + 1;
     assert(0<=in);
     assert(in<inlen);
-    havoc u;
   }
 
-    assert(0<=buf);
-    assert(buf<bufferlen);
-    buf := buf + 1;
+  assert(0<=buf);
+  assert(buf<bufferlen);
+  buf := buf + 1;
 
   /* OK */
   assert(0<=buf);

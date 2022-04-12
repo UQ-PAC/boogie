@@ -833,8 +833,13 @@ namespace Microsoft.Boogie
     public int InterpolationBVMode = 0;
 
     public bool InterpolationSimplify = false;
+    public enum Direction {
+      Forward,
+      Backward,
+      Bidirectional
+    }
 
-    public bool ForwardSqueeze = false;
+    public Direction InterpolationDirection { get; set; } = Direction.Backward;
 
     public bool InterpolationProfiling = false;
 
@@ -1102,6 +1107,25 @@ namespace Microsoft.Boogie
                   Contract.Assert(false);
                   throw new cce.UnreachableException();
                 }
+            }
+          }
+          return true;
+
+        case "interpolationDirection":
+          if (ps.ConfirmArgumentCount(1)) {
+            switch (args[ps.i].ToLower()) {
+              case "forward":
+                InterpolationDirection = Direction.Forward;
+                break;
+              case "backward":
+                InterpolationDirection = Direction.Backward;
+                break;
+              case "bidirectional":
+                InterpolationDirection = Direction.Bidirectional;
+                break;
+              default:
+                ps.Error("Invalid argument '{0}' to option {1}", args[ps.i], ps.s);
+                break;
             }
           }
           return true;
@@ -1849,7 +1873,6 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("freeVarLambdaLifting", ref FreeVarLambdaLifting) ||
               ps.CheckBooleanFlag("pruneFunctionsAndAxioms", ref PruneFunctionsAndAxioms) ||
               ps.CheckBooleanFlag("warnNotEliminatedVars", ref WarnNotEliminatedVars) ||
-              ps.CheckBooleanFlag("forwardSqueeze", ref ForwardSqueeze) ||
               ps.CheckBooleanFlag("interpolationSimplify", ref InterpolationSimplify) ||
               ps.CheckBooleanFlag("interpolationProfiling", ref InterpolationProfiling) ||
               ps.CheckBooleanFlag("aggressiveQE", ref AggressiveQE) ||

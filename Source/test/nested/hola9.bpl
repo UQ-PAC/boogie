@@ -1,3 +1,4 @@
+// https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/blob/main/c/loop-invgen/fragtest_simple.c
 procedure hola9(){
   var i: int;
   var pvlen: int;
@@ -10,6 +11,9 @@ procedure hola9(){
 
   //  pkt = pktq->tqh_first;
   while (*) {
+    // if (i > 1000000) {
+    //  break;
+    //}
     i := i + 1;
   }
   if (i > pvlen) {
@@ -18,12 +22,12 @@ procedure hola9(){
   i := 0;
 
   while (*) {
+    //if (i > 1000000) {
+    //  break;
+    //}
     t := i;
     i := i + 1;
     k := k + 1;
-  }
-  while (*) {
-
   }
 
   j := 0;
@@ -33,10 +37,8 @@ procedure hola9(){
     k := k -1;
     i := i - 1;
     j := j + 1;
-    if (!(j < n)) {
-      goto END;
+    if (j >= n) {
+      break;
     }
   }
-  END:
-  return;
 }
