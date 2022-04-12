@@ -7,7 +7,7 @@ procedure hola45()
 	var j: int;
 	var c: int;
 	var d: int;
-	var flag: bool;
+	var flag: int;
 
 	var w: int;
 	var z: int;
@@ -25,7 +25,7 @@ procedure hola45()
 		i := i + x;
 		j := j + y;
 
-		if(flag){
+		if(flag > 0){
 			j := j + 1;
 		}
   }

@@ -1,10 +1,9 @@
+// https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/blob/main/c/loop-invariants/mod4.c
 procedure main() {
-  var u: bool;
   var x: int;
   x := 0;
-  while(u) {
+  while(*) {
     x := x + 4;
-    havoc u;
   }
   assert((x mod 4) == 0);
   

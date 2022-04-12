@@ -1,11 +1,10 @@
 procedure main(){
   var x: int;
   var y: int;
-  var u: bool;
   assume (x >= 0);
   y := 1;
   
-  while(u){
+  while(*){
     if(x mod 3 == 1){
       x := x + 2;
       y := 0;
@@ -14,8 +13,7 @@ procedure main(){
         x := x + 1;
         y := 0;
       } else{
-        havoc u;
-	      if(u){
+	      if(*){
 	        x := x + 4;
           y := 1;
         } else{

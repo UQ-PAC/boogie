@@ -164,7 +164,9 @@ namespace Microsoft.Boogie.InvariantInference {
       program.AddTopLevelDeclarations(newBVFunctions);
 
     }
-
+    
+    // todo: only exit loop via unified header as well
+    // try to optimise use of block variable - merge empty loopheads etc.
     private static Block FlattenLoops(Implementation impl, Graph<Block> g) {
       if (CommandLineOptions.Clo.TraceVerify) {
         Console.WriteLine("before flattening multiple loops");
