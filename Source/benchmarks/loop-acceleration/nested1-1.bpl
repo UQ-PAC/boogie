@@ -8,5 +8,5 @@ procedure main () {
     }
     x := x + 1;
   }
-  assert (x mod 2 == 0)
+  assert (x mod 2 != 0);
 }

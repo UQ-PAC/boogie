@@ -1,4 +1,4 @@
-proced*re main() {
+procedure main() {
     var i: int, n: int, a: int, b: int;
     i := 0;
     a := 0;

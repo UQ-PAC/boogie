@@ -24,7 +24,7 @@ procedure main()
 
             v := v + 1;
           }
-          assert(v mod 4 != 0)
+          assert(v mod 4 != 0);
           z := z + 1;
         }
         y := y + 1;
