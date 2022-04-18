@@ -2775,8 +2775,7 @@ namespace Microsoft.Boogie
     }
   }
 
-  public class Incarnation : LocalVariable
-  {
+  public class Incarnation : LocalVariable {
     public int incarnationNumber;
     public readonly Variable OriginalVariable;
 
@@ -2784,12 +2783,21 @@ namespace Microsoft.Boogie
       base(
         var.tok,
         new TypedIdent(var.TypedIdent.tok, var.TypedIdent.Name + "@" + i, var.TypedIdent.Type)
-      )
-    {
+      ) {
       Contract.Requires(var != null);
       incarnationNumber = i;
       OriginalVariable = var;
     }
+
+    public Incarnation(Variable /*!*/ var, int i, bool Forward) :
+      base(var.tok, new TypedIdent(var.TypedIdent.tok, Forward ? var.TypedIdent.Name + "@" + "f" + i : var.TypedIdent.Name + "@" + "b" + i , var.TypedIdent.Type))
+    { 
+      Contract.Requires(var != null);
+      incarnationNumber = i;
+      OriginalVariable = var;
+    }
+
+
   }
 
   public class BoundVariable : Variable

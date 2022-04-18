@@ -156,10 +156,10 @@ namespace Microsoft.Boogie.InvariantInference {
             if (g.Headers.Count() > 1) {
               loopHead = FlattenLoops(implCopy, g, headLabelIds, blockVarName);
             } else {
-              loopHead = g.Headers.ToList()[0];
+              loopHead = g.Headers.First();
             }
 
-            InvariantInferrer inferrer = new InvariantInferrer(program, procedureImplementations, implCopy, loopHead, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs, QFAxioms);
+            InvariantInferrer inferrer = new InvariantInferrer(program, implCopy, loopHead, prover, interpol, BitVectorOpFunctions, newBVFunctions, functionDefs, QFAxioms);
             if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.Stats ||
               CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.None) {
               try {
@@ -458,7 +458,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
   }
   public class InvariantInferrer {
-
+    private Program program;
     private Boogie2VCExprTranslator translator;
     private VCExpressionGenerator gen;
     private ProverInterface prover;
@@ -473,10 +473,11 @@ namespace Microsoft.Boogie.InvariantInference {
     private Dictionary<Function, VCExpr> functionDefs;
     private List<VCExpr> QFAxioms;
 
-    public InvariantInferrer(Program program, Dictionary<Procedure, Implementation[]> procImpl, Implementation impl, Block loopHead,
-      ProverInterface prover, InterpolationProver interpol, SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs, List<VCExpr> QFAxioms) {
+    public InvariantInferrer(Program program, Implementation impl, Block loopHead, ProverInterface prover, InterpolationProver interpol,
+      SortedDictionary<(string, int), Function> bvOps, List<Function> newBVFunctions, Dictionary<Function, VCExpr> functionDefs, List<VCExpr> QFAxioms) {
       this.translator = prover.Context.BoogieExprTranslator;
       this.gen = prover.Context.ExprGen;
+      this.program = program;
       //this.scopeVars = scopeVars;
       this.prover = prover;
       this.impl = impl;
@@ -493,14 +494,39 @@ namespace Microsoft.Boogie.InvariantInference {
       stopWatch.Start();
       Stopwatch loopTime = new Stopwatch();
 
+      Graph<Block> g = Program.GraphFromImpl(impl);
+      g.ComputeLoops();
+      HashSet<Block> loopBody = new HashSet<Block>();
+      foreach (Block backEdge in g.BackEdgeNodes(loopHead)) {
+        loopBody.UnionWith(g.NaturalLoops(loopHead, backEdge));
+      }
+
+      HashSet<Block> beforeLoop = new HashSet<Block>();
+      foreach (Block p in g.Predecessors(loopHead).Except(loopBody)) {
+        beforeLoop.UnionWith(g.ComputeReachability(p, false));
+      }
+
+      // all blocks in loop but not loop body or before loop are after loop
+      HashSet<Block> afterLoop = g.Nodes.Except(loopBody.Union(beforeLoop)).ToHashSet();
+
+      
+      bool passify = true;
+
+      if (passify) {
+        Passifier passifier = new Passifier(program, impl, loopBody, beforeLoop, afterLoop, loopHead);
+        //origImpl = duplicator.VisitImplementation(impl);
+      } else {
+        //origImpl = impl;
+      }
+
       Block start = impl.Blocks[0];
       List<Block> ends = getEndBlocks();
 
       VCExpr requires = convertRequires();
       VCExpr ensures = convertEnsures();
 
-      VCExpr loopP = getLoopPreCondition(requires, start);
-      VCExpr loopQ = getLoopPostCondition(ensures, ends);
+      VCExpr loopP = setSP(start, loopHead, requires, beforeLoop.Union(new HashSet<Block> { loopHead }));
+      VCExpr loopQ = setWP(ends, loopHead, ensures, loopBody.Union(afterLoop));
 
       VCExpr loopPElim = prover.EliminateQuantifiers(loopP, bvOps, newBVFunctions);
       VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, bvOps, newBVFunctions);
@@ -514,21 +540,25 @@ namespace Microsoft.Boogie.InvariantInference {
       }
       */
 
+
+      /*
       // probably can improve this
       List<List<Block>> loopPaths = new List<List<Block>>();
       DoDFSVisitLoop(loopHead, loopPaths);
-      HashSet<Block> loopBody = new HashSet<Block>();
+      HashSet<Block> loopBodyOld = new HashSet<Block>();
       foreach (List<Block> l in loopPaths) {
         foreach (Block b in l) {
-          loopBody.Add(b);
+          loopBodyOld.Add(b);
         }
       }
-      if (loopBody.Count == 0) {
-        loopBody.Add(loopHead);
+      if (loopBodyOld.Count == 0) {
+        loopBodyOld.Add(loopHead);
       }
+      */
+
 
       // squeezing algorithm
-      
+
       // really need to remove this because it doesn't really work for loops with exit that doesn't occur from loop head
       VCExpr K = getLoopGuard(loopBody); // guard, now only used for induction, hopefully can be removed there too because it's annoying
 
@@ -546,7 +576,6 @@ namespace Microsoft.Boogie.InvariantInference {
       int interpolantiterations = 0;
       int concrete = 0;
       int iterations = 0;
-      bool doConcrete = false;
 
       if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
         Console.WriteLine("A: " + loopPElim);
@@ -746,7 +775,6 @@ namespace Microsoft.Boogie.InvariantInference {
             }
             concrete++;
           }
-          doConcrete = false;
         }
       }
       Console.WriteLine("gave up on finding invariant after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
@@ -754,8 +782,8 @@ namespace Microsoft.Boogie.InvariantInference {
       return VCExpressionGenerator.True;
     }
 
-    // naive implementation, will surely need to make more sophisticated, just expects loop guard to be in assume statement at start of second block of any loop path
-    // works in cases transformed directly from while loop, but might have issues with assembly-level unstructured code?
+    // ors any assumes in blocks within the loop that the loop head directly points to
+    // might cause issues for loops with exit points that aren't the loop head?
     private VCExpr getLoopGuard(HashSet<Block> loopBody) {
       List<VCExpr> loopGuards = new List<VCExpr>();
       foreach (Block nextBlock in loopHead.Exits()) {
@@ -938,11 +966,11 @@ namespace Microsoft.Boogie.InvariantInference {
     }
 
 
-    private VCExpr setWP(Block initial, Block target, VCExpr Q_In, HashSet<Block> blocks) {
+    private VCExpr setWP(Block initial, Block target, VCExpr Q_In, IEnumerable<Block> blocks) {
       return setWP(new List<Block> { initial }, target, Q_In, blocks);
     }
-    private VCExpr setWP(List<Block> initials, Block target, VCExpr Q_In, HashSet<Block> blocks) {
-      Debug.Assert(blocks.Count > 0);
+    private VCExpr setWP(List<Block> initials, Block target, VCExpr Q_In, IEnumerable<Block> blocks) {
+      Debug.Assert(blocks.Count() > 0);
 
       Dictionary<Block, VCExpr> blockWPs = new Dictionary<Block, VCExpr>();
       Queue<Block> toTry = new Queue<Block>();
@@ -953,7 +981,7 @@ namespace Microsoft.Boogie.InvariantInference {
             toTry.Enqueue(predecessor);
           }
         }
-        if (blocks.Count == 1) {
+        if (blocks.Count() == 1) {
           return blockWPs[initial];
         }
       }
@@ -994,8 +1022,8 @@ namespace Microsoft.Boogie.InvariantInference {
       throw new cce.UnreachableException();
     }
 
-    private VCExpr setSP(Block initial, Block target, VCExpr P_In, HashSet<Block> blocks) {
-      Debug.Assert(blocks.Count > 0);
+    private VCExpr setSP(Block initial, Block target, VCExpr P_In, IEnumerable<Block> blocks) {
+      Debug.Assert(blocks.Count() > 0);
 
       Dictionary<Block, VCExpr> blockSPs = new Dictionary<Block, VCExpr>();
       Queue<Block> toTry = new Queue<Block>();
@@ -1007,7 +1035,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
       }
 
-      if (blocks.Count == 1) {
+      if (blocks.Count() == 1) {
         return blockSPs[initial];
       }
 
@@ -1066,7 +1094,7 @@ namespace Microsoft.Boogie.InvariantInference {
       return P;
     }
 
-    private VCExpr getLoopPostCondition(VCExpr ensures, List<Block> ends) {
+    private VCExpr getLoopPostCondition(VCExpr ensures, List<Block> ends, HashSet<Block> loopOrAfter) {
       HashSet<Block> blocks = new HashSet<Block>();
       foreach (Block end in ends) {
         List<List<Block>> paths = new List<List<Block>>();
@@ -1084,17 +1112,8 @@ namespace Microsoft.Boogie.InvariantInference {
       return setWP(ends, loopHead, ensures, blocks);
     }
 
-    private VCExpr getLoopPreCondition(VCExpr requires, Block start) {
-      List<List<Block>> paths = new List<List<Block>>();
-      paths.Add(new List<Block> { start });
-      DoDFSVisit(start, loopHead, paths);
-      HashSet<Block> blocks = new HashSet<Block>();
-      foreach (List<Block> l in paths) {
-        foreach (Block b in l) {
-          blocks.Add(b);
-        }
-      }
-      blocks.Add(loopHead);
+    private VCExpr getLoopPreCondition(VCExpr requires, Block start, IEnumerable<Block> blocks) {
+
 
       return setSP(start, loopHead, requires, blocks);
     }
