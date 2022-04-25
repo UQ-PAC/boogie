@@ -12,23 +12,33 @@ using VC;
 namespace Microsoft.Boogie.InvariantInference {
   class Passifier {
 
-    private Implementation impl;
-    private HashSet<Block> loopBody;
-    private HashSet<Block> beforeLoop;
-    private HashSet<Block> afterLoop;
-    private Block loopHead;
-    private Program program;
-    private Dictionary<Variable, int> varToIncarnationForward;
-    private Dictionary<Variable, int> varToIncarnationBackward;
-    private Dictionary<Variable, Expr> loopStartIncarnationsForward;
-    private Dictionary<Variable, Expr> loopEndIncarnationsForward;
-    private Dictionary<Variable, Expr> loopStartIncarnationsBackward;
-    private Dictionary<Variable, Expr> loopEndIncarnationsBackward;
-    private Dictionary<Block, Block> origToForward;
-    private Dictionary<Block, Block> origToBackward;
-    private Implementation forwardPassive;
-    private Implementation backwardPassive;
-    bool loopBodyOnly = false;
+    public Implementation impl;
+    public HashSet<Block> loopBody;
+    public HashSet<Block> beforeLoop;
+    public HashSet<Block> afterLoop;
+    public Block loopHead;
+    public Block start;
+    public Block end;
+    public Program program;
+    public Dictionary<Variable, int> varToIncarnationForward;
+    public Dictionary<Variable, int> varToIncarnationBackward;
+    public Dictionary<Variable, int> loopStartIncarnationNumberForward;
+    public Dictionary<Variable, int> loopStartIncarnationNumberBackward;
+    public Dictionary<Variable, int> loopEndIncarnationNumberForward;
+    public Dictionary<Variable, int> loopEndIncarnationNumberBackward;
+    public Dictionary<Variable, Expr> loopStartIncarnationsForward;
+    public Dictionary<Variable, Expr> loopEndIncarnationsForward;
+    public Dictionary<Variable, Expr> loopStartIncarnationsBackward;
+    public Dictionary<Variable, Expr> loopEndIncarnationsBackward; 
+    public Dictionary<Block, Block> origToForward;
+    public Dictionary<Block, Block> origToBackward;
+    public Implementation forwardPassive;
+    public Implementation backwardPassive;
+    private List<Incarnation> forwardIncarnations;
+    private List<Incarnation> backwardIncarnations;
+    public Block backwardEnd;
+    public ICollection<Block> backwardProgramEndReachable;
+    public Block forwardEnd;
 
     public Passifier(Program program, Implementation impl, HashSet<Block> loopBody, HashSet<Block> beforeLoop, HashSet<Block> afterLoop, Block loopHead) {
       this.program = program;
@@ -41,20 +51,23 @@ namespace Microsoft.Boogie.InvariantInference {
       varToIncarnationBackward = new Dictionary<Variable, int>();
       varToIncarnationForward = new Dictionary<Variable, int>();
 
+      forwardIncarnations = new List<Incarnation>();
+      backwardIncarnations = new List<Incarnation>();
+
       // initialise - insert preconditions, postconditions, unified exit, join blocks?
       // need unified back edge block too ?
-      InsertPreCondition(impl.Blocks[0]);
-      InsertPostCondition(impl.Blocks);
+      start = InsertPreCondition(impl.Blocks[0]);
+      end = InsertPostCondition(impl.Blocks);
 
-      if (CommandLineOptions.Clo.TraceVerify) {
+      if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
         Console.WriteLine("before passifying");
         ConditionGeneration.EmitImpl(impl, false);
       }
 
       // duplicate impl into two versions, forward and back
       Duplicator duplicator = new Duplicator();
-      Implementation forwardPassive = duplicator.VisitImplementation(impl);
-      Implementation backwardPassive = duplicator.VisitImplementation(impl);
+      forwardPassive = duplicator.VisitImplementation(impl);
+      backwardPassive = duplicator.VisitImplementation(impl);
 
       // need mapping from original impl to new impls
       origToForward = new Dictionary<Block, Block>();
@@ -82,10 +95,10 @@ namespace Microsoft.Boogie.InvariantInference {
         dupeAfterLoopForward.Add(clone);
       }
 
-      Block forwardEnd = new Block(Token.NoToken, "ForwardLoopEnd", new List<Cmd>(), new ReturnCmd(Token.NoToken));
+      forwardEnd = new Block(Token.NoToken, "ForwardLoopEnd", new List<Cmd>(), new ReturnCmd(Token.NoToken));
       forwardPassive.Blocks.Add(forwardEnd);
 
-      Block backwardEnd = new Block(Token.NoToken, "BackwardLoopEnd", new List<Cmd>(), new ReturnCmd(Token.NoToken));
+      backwardEnd = new Block(Token.NoToken, "BackwardLoopEnd", new List<Cmd>(), new ReturnCmd(Token.NoToken));
       backwardPassive.Blocks.Add(backwardEnd);
 
       foreach (Block b in forwardPassive.Blocks) {
@@ -141,28 +154,41 @@ namespace Microsoft.Boogie.InvariantInference {
       forwardPassive.ComputePredecessorsForBlocks();
       backwardPassive.ComputePredecessorsForBlocks();
 
-      loopEndIncarnationsForward = passify(forwardPassive, forwardPassive.Blocks, forwardPassive.Proc.Modifies, true);
+      passify(forwardPassive, forwardPassive.Blocks, forwardPassive.Proc.Modifies, true);
 
-      if (CommandLineOptions.Clo.TraceVerify) {
+      if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
         Console.WriteLine("after passifying forward");
         ConditionGeneration.EmitImpl(forwardPassive, false);
       }
 
-      loopEndIncarnationsBackward = passify(backwardPassive, backwardPassive.Blocks, backwardPassive.Proc.Modifies, false);
+      passify(backwardPassive, backwardPassive.Blocks, backwardPassive.Proc.Modifies, false);
 
-      if (CommandLineOptions.Clo.TraceVerify) {
+      TypecheckingContext tc = new TypecheckingContext(null);
+      forwardPassive.Typecheck(tc);
+      backwardPassive.Typecheck(tc);
+
+      if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
         Console.WriteLine("after passifying backward");
         ConditionGeneration.EmitImpl(backwardPassive, false);
       }
+
+      /*
+      NextIterationForward();
+
+
+
+      NextIterationBackward();
+
+
+      */
 
 
 
     }
 
-
     // do single passification pass on each, do first loop iterations
 
-    private void LoopBodyOnly() {
+    public void LoopBodyOnly() {
       foreach (Block b in beforeLoop) {
         forwardPassive.Blocks.Remove(origToForward[b]);
       }
@@ -181,18 +207,83 @@ namespace Microsoft.Boogie.InvariantInference {
       }
       backwardPassive.ComputePredecessorsForBlocks();
       forwardPassive.ComputePredecessorsForBlocks();
-      loopBodyOnly = true;
     }
 
-    public void NextIteration() {
-      if (!loopBodyOnly) {
-        LoopBodyOnly();
+    public void NextIterationForward() {
+      NextIterationForward(loopEndIncarnationsForward);
+    }
+
+
+    public void NextIterationForward(Dictionary<Variable, Expr> firstIncarnations) {
+
+      Dictionary<Variable, Expr> substitutions = new Dictionary<Variable, Expr>();
+      
+
+      List<Incarnation> currentIncarnations = new List<Incarnation>(forwardIncarnations);
+      foreach (Incarnation i in currentIncarnations) {
+        if (loopStartIncarnationNumberForward[i.OriginalVariable] < i.incarnationNumber) {
+          Variable iPrime = CreateIncarnation(i.OriginalVariable, true);
+          IdentifierExpr incarnationExpr = new IdentifierExpr(iPrime.tok, iPrime);
+          substitutions.Add(i, incarnationExpr);
+        } else if (loopStartIncarnationNumberForward[i.OriginalVariable] == i.incarnationNumber) {
+          // make first variables in this loop match last variables in previous loop
+          substitutions.Add(i, firstIncarnations[i.OriginalVariable]);
+        }
+      }
+      Substitution substituter = Substituter.SubstitutionFromDictionary(substitutions);
+
+      foreach (Block b in forwardPassive.Blocks) {
+        List<Cmd> newCmds = new List<Cmd>();
+        foreach (Cmd c in b.Cmds) {
+          newCmds.Add(Substituter.Apply(substituter, c));
+        }
+        b.Cmds = newCmds;
+      }
+      // need to update loopStartForward, loopEndForward etc. here!!!
+
+      if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+        Console.WriteLine("after second forward iteration");
+        ConditionGeneration.EmitImpl(forwardPassive, false);
+      }
+    }
+
+    public void NextIterationBackward() {
+      NextIterationBackward(loopStartIncarnationsBackward);
+    }
+
+    public void NextIterationBackward(Dictionary<Variable, Expr> lastIncarnations) {
+
+      Dictionary<Variable, Expr> substitutions = new Dictionary<Variable, Expr>();
+
+      List<Incarnation> currentIncarnations = new List<Incarnation>(backwardIncarnations);
+      foreach (Incarnation i in currentIncarnations) {
+        // make last variables in this loop match first variables in previous loop
+        if (loopEndIncarnationNumberBackward[i.OriginalVariable] == i.incarnationNumber) {
+          substitutions.Add(i, lastIncarnations[i.OriginalVariable]);
+        } else if (loopStartIncarnationNumberBackward[i.OriginalVariable] <= i.incarnationNumber) {
+          Variable iPrime = CreateIncarnation(i.OriginalVariable, false);
+          IdentifierExpr incarnationExpr = new IdentifierExpr(iPrime.tok, iPrime);
+          substitutions.Add(i, incarnationExpr);
+        }
       }
 
+      Substitution substituter = Substituter.SubstitutionFromDictionary(substitutions);
 
-  }
+      foreach (Block b in backwardPassive.Blocks) {
+        List<Cmd> newCmds = new List<Cmd>();
+        foreach (Cmd c in b.Cmds) {
+          newCmds.Add(Substituter.Apply(substituter, c));
+        }
+        b.Cmds = newCmds;
+      }
 
-    // then have method to duplicate loop body, update incarnations, and insert at end of loop to unroll
+      // need to update loopStartBackward, loopEndBackward etc. here!!!
+
+      if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
+        Console.WriteLine("after second backward iteration");
+        ConditionGeneration.EmitImpl(backwardPassive, false);
+      }
+    }
 
     private Block CreateBlockBetween(Block p, Block s) {
       string newBlockLabel = p.Label + "_@2_" + s.Label;
@@ -373,7 +464,7 @@ namespace Microsoft.Boogie.InvariantInference {
     }
     */
 
-    private Dictionary<Variable, Expr> passify(Implementation currentImpl, List<Block> blocks, List<IdentifierExpr> modifies, bool Forward) {
+    private void passify(Implementation currentImpl, List<Block> blocks, List<IdentifierExpr> modifies, bool Forward) {
 
       Graph<Block> g = Program.GraphFromBlocks(blocks);
       IEnumerable<Block> sorted = g.TopologicalSort();
@@ -385,11 +476,10 @@ namespace Microsoft.Boogie.InvariantInference {
       Substitution oldFrameSubst = Substituter.SubstitutionFromDictionary(oldFrameMap);
 
       Dictionary<Block, Dictionary<Variable, Expr>> block2Incarnation = new Dictionary<Block, Dictionary<Variable, Expr>>();
-      Dictionary<Variable, Expr> lastIncarnationMap = null;
 
       Dictionary<Variable, Expr> initialMap = new Dictionary<Variable, Expr>();
 
-      // need to creat initial incarnation map consisting of all local, global variables -> incarnation 0
+      // create initial incarnation map consisting of all local, global variables -> incarnation 0
 
 
       foreach (Variable v in currentImpl.LocVars) {
@@ -406,19 +496,34 @@ namespace Microsoft.Boogie.InvariantInference {
         if (Forward) {
           if (b == origToForward[loopHead]) {
             loopStartIncarnationsForward = new Dictionary<Variable, Expr>(incarnationMap);
+            loopStartIncarnationNumberForward = new Dictionary<Variable, int>(varToIncarnationForward);
           }
         } else {
           if (b == origToBackward[loopHead]) {
             loopStartIncarnationsBackward = new Dictionary<Variable, Expr>(incarnationMap);
+            loopStartIncarnationNumberBackward = new Dictionary<Variable, int>(varToIncarnationBackward);
           }
         }
         passifyBlock(b, incarnationMap, oldFrameSubst, Forward);
         if (b.TransferCmd is GotoCmd) {
           block2Incarnation.Add(b, incarnationMap);
         }
-        lastIncarnationMap = incarnationMap;
+        if (Forward) {
+          if (b == forwardEnd) {
+            loopEndIncarnationsForward = new Dictionary<Variable, Expr>(incarnationMap);
+            loopEndIncarnationNumberForward = new Dictionary<Variable, int>(varToIncarnationForward);
+          }
+        } else {
+          if (b == backwardEnd) {
+            loopEndIncarnationsBackward = new Dictionary<Variable, Expr>(incarnationMap);
+            loopEndIncarnationNumberBackward = new Dictionary<Variable, int>(varToIncarnationBackward);
+          }
+        }
       }
-      return lastIncarnationMap;
+
+      if (!Forward) {
+        backwardProgramEndReachable = g.ComputeReachability(origToBackward[end], false);
+      }
     }
 
     private void passifyBlock(Block b, Dictionary<Variable, Expr> incarnationMap, Substitution oldFrameSubst, bool Forward) {
@@ -647,11 +752,16 @@ namespace Microsoft.Boogie.InvariantInference {
         }
         incarnationNumber = varToIncarnationBackward[x];
       }
-      Variable xPrime = new Incarnation(x, incarnationNumber, Forward);
+      Incarnation xPrime = new Incarnation(x, incarnationNumber, Forward);
+      if (Forward) {
+        forwardIncarnations.Add(xPrime);
+      } else {
+        backwardIncarnations.Add(xPrime);
+      }
       return xPrime;
     }
 
-    private void InsertPostCondition(IEnumerable<Block> blocks) {
+    private Block InsertPostCondition(IEnumerable<Block> blocks) {
 
       List<Block> exits = new List<Block>();
       foreach (Block b in blocks) {
@@ -681,9 +791,10 @@ namespace Microsoft.Boogie.InvariantInference {
       }
 
       exitBlock.Cmds.AddRange(postconditions);
+      return exitBlock;
     }
 
-    private void InsertPreCondition(Block start) {
+    private Block InsertPreCondition(Block start) {
       List<Cmd> preconditions = new List<Cmd>();
 
       Substitution formalProcImplSubst = Substituter.SubstitutionFromDictionary(impl.GetImplFormalMap());
@@ -730,6 +841,8 @@ namespace Microsoft.Boogie.InvariantInference {
       // add preconditions to start of start block
       preconditions.AddRange(start.cmds);
       start.cmds = preconditions;
+
+      return start;
     }
 
   }

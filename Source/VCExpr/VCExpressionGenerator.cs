@@ -301,6 +301,10 @@ namespace Microsoft.Boogie
         return True;
       }
 
+      if (e0 is VCExprUnary v && v.Op == NotOp) {
+        return v[0];
+      }
+
       return Not(e0);
     }
 

@@ -506,27 +506,27 @@ namespace Microsoft.Boogie.InvariantInference {
         beforeLoop.UnionWith(g.ComputeReachability(p, false));
       }
 
-      // all blocks in loop but not loop body or before loop are after loop
-      HashSet<Block> afterLoop = g.Nodes.Except(loopBody.Union(beforeLoop)).ToHashSet();
-
-      
-      bool passify = true;
-
-      if (passify) {
-        Passifier passifier = new Passifier(program, impl, loopBody, beforeLoop, afterLoop, loopHead);
-        //origImpl = duplicator.VisitImplementation(impl);
-      } else {
-        //origImpl = impl;
+      if (CommandLineOptions.Clo.PassifyInterpolation) {
+        // all blocks in loop but not loop body or before loop are after loop
+        HashSet<Block> afterLoop = g.Nodes.Except(loopBody.Union(beforeLoop)).ToHashSet();
+        return InferLoopInvariantPassive(new Passifier(program, impl, loopBody, beforeLoop, afterLoop, loopHead));
       }
+
+      HashSet<Block> after = new HashSet<Block>();
 
       Block start = impl.Blocks[0];
       List<Block> ends = getEndBlocks();
 
+      foreach (Block b in ends) {
+        after.UnionWith(g.ComputeReachability(b, false));
+      }
+      after.ExceptWith(beforeLoop);
+
       VCExpr requires = convertRequires();
       VCExpr ensures = convertEnsures();
 
-      VCExpr loopP = setSP(start, loopHead, requires, beforeLoop.Union(new HashSet<Block> { loopHead }));
-      VCExpr loopQ = setWP(ends, loopHead, ensures, loopBody.Union(afterLoop));
+      VCExpr loopP = setSP(start, loopHead, requires, beforeLoop);
+      VCExpr loopQ = getLoopPostCondition(ensures, ends);
 
       VCExpr loopPElim = prover.EliminateQuantifiers(loopP, bvOps, newBVFunctions);
       VCExpr loopQElim = prover.EliminateQuantifiers(loopQ, bvOps, newBVFunctions);
@@ -602,13 +602,13 @@ namespace Microsoft.Boogie.InvariantInference {
 
         if (!aggressiveQE) {
           B_rElim = prover.EliminateQuantifiers(B[r], bvOps, newBVFunctions);
-          
+
           if (B[r] == B_rElim) {
             B_rElim = prover.Simplify(B_rElim, bvOps, newBVFunctions);
           }
           B[r] = B_rElim;
         }
-          //}
+        //}
 
         if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
           Console.WriteLine("B: " + B_rElim);
@@ -624,7 +624,7 @@ namespace Microsoft.Boogie.InvariantInference {
         }
 
         VCExpr I;
-        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, bvOps, newBVFunctions, functionDefs, QFAxioms)) { 
+        if (interpol.CalculateInterpolant(B_rElim, ADisjunct, Forward, out I, bvOps, newBVFunctions, functionDefs, QFAxioms)) {
           interpolantiterations++;
 
           VCExpr InvariantCandidate;
@@ -650,7 +650,7 @@ namespace Microsoft.Boogie.InvariantInference {
             Console.Out.Flush();
 
             // extra checks to catch potential unsoundness in algorithm, only do when debug info enabled
-            
+
             /*
             if (!satisfiable(gen.ImpliesSimp(InvariantCandidate, loopQElim))) {
               Console.WriteLine("generated invariant doesn't satisfy I & !K ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
@@ -664,7 +664,7 @@ namespace Microsoft.Boogie.InvariantInference {
             }
             */
           }
-          
+
           if (isInductive(InvariantCandidate, loopBody, K)) {
             /* 
              * this catches some potential unsoundness
@@ -679,7 +679,7 @@ namespace Microsoft.Boogie.InvariantInference {
             }
             stopWatch.Stop();
             TimeSpan ts = stopWatch.Elapsed;
-            
+
             if (DebugLevel == CommandLineOptions.InterpolationDebug.All || DebugLevel == CommandLineOptions.InterpolationDebug.Stats) {
               String seconds = String.Format("{0:N3}", ts.TotalSeconds);
               // success, iterations, abstract iterations, concrete iterations, invariant size, time taken in seconds
@@ -749,9 +749,12 @@ namespace Microsoft.Boogie.InvariantInference {
             }
             return VCExpressionGenerator.True; // fail to find invariant
           } else {
-            backtracks++; 
+            backtracks++;
             if (Forward) {
               t = concrete;
+              for (int i = t + 1; i < A.Count; i++) {
+                A.RemoveAt(i);
+              }
               VCExpr AExpr = setSP(loopHead, loopHead, A[t], loopBody);
               VCExpr AElim = AExpr;
               // if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
@@ -769,6 +772,9 @@ namespace Microsoft.Boogie.InvariantInference {
               t++;
             } else {
               r = concrete;
+              for (int i = r + 1; i < B.Count; i++) {
+                B.RemoveAt(i);
+              }
               B.Insert(r + 1, gen.OrSimp(B[0], gen.NotSimp(setWP(loopHead, loopHead, gen.NotSimp(B[r]), loopBody))));
               //B.Insert(r + 1, gen.OrSimp(B[0], gen.AndSimp(K, setWP(loopHead, loopHead, B[r], loopBody))));
               r++;
@@ -830,11 +836,10 @@ namespace Microsoft.Boogie.InvariantInference {
     }
 
     private bool isInductive(VCExpr invarCandidate, HashSet<Block> loopBody, VCExpr guard) {
-      VCExpressionGenerator gen = prover.Context.ExprGen;
       VCExpr loopBodyWP = setWP(loopHead, loopHead, invarCandidate, loopBody);
       //VCExpr imp = gen.ImpliesSimp(invarCandidate, loopBodyWP); 
       // need to check how important anding guard here actually is - seems to have some minor impact?
-      VCExpr imp = gen.ImpliesSimp(gen.AndSimp(invarCandidate, guard), loopBodyWP); 
+      VCExpr imp = gen.ImpliesSimp(gen.AndSimp(invarCandidate, guard), loopBodyWP);
       //VCExpr loopBodySP = setSP(loopHead, loopHead, gen.AndSimp(invarCandidate, guard), loopBody, gen, translator);
       //VCExpr imp = gen.ImpliesSimp(loopBodySP, invarCandidate);
       return satisfiable(imp);
@@ -881,7 +886,7 @@ namespace Microsoft.Boogie.InvariantInference {
       }
       return ends;
     }
-    
+
     private void DoDFSVisit(Block block, Block target, List<List<Block>> paths) {
 
       // case 2. We visit a node that ends with a return => path does not reach target
@@ -977,7 +982,7 @@ namespace Microsoft.Boogie.InvariantInference {
       foreach (Block initial in initials) {
         blockWPs.Add(initial, blockWP(initial, Q_In));
         foreach (Block predecessor in initial.Predecessors) {
-          if (blocks.Contains(predecessor)) {
+          if (blocks.Contains(predecessor) && !toTry.Contains(predecessor)) {
             toTry.Enqueue(predecessor);
           }
         }
@@ -1094,7 +1099,7 @@ namespace Microsoft.Boogie.InvariantInference {
       return P;
     }
 
-    private VCExpr getLoopPostCondition(VCExpr ensures, List<Block> ends, HashSet<Block> loopOrAfter) {
+    private VCExpr getLoopPostCondition(VCExpr ensures, List<Block> ends) {
       HashSet<Block> blocks = new HashSet<Block>();
       foreach (Block end in ends) {
         List<List<Block>> paths = new List<List<Block>>();
@@ -1112,17 +1117,10 @@ namespace Microsoft.Boogie.InvariantInference {
       return setWP(ends, loopHead, ensures, blocks);
     }
 
-    private VCExpr getLoopPreCondition(VCExpr requires, Block start, IEnumerable<Block> blocks) {
-
-
-      return setSP(start, loopHead, requires, blocks);
-    }
-    
     private VCExpr weakestPrecondition(Cmd cmd, VCExpr Q) {
-      if (cmd is AssertCmd) {
+      if (cmd is AssertCmd assertC) {
         // assert A -> A && Q
-        AssertCmd ac = (AssertCmd) cmd;
-        VCExpr A = translator.Translate(ac.Expr);
+        VCExpr A = translator.Translate(assertC.Expr);
 
         // handles edge case where loop has no postcondition - instead use last assertion as base case 
         /*
@@ -1132,20 +1130,18 @@ namespace Microsoft.Boogie.InvariantInference {
         */
 
         return gen.AndSimp(A, Q);
-      } else if (cmd is AssumeCmd) {
+      } else if (cmd is AssumeCmd assumeC) {
         // assume A -> A ==> Q
-        AssumeCmd ac = (AssumeCmd) cmd;
-        VCExpr A = translator.Translate(ac.Expr);
+        VCExpr A = translator.Translate(assumeC.Expr);
 
         return gen.ImpliesSimp(A, Q);
 
-      } else if (cmd is HavocCmd) {
+      } else if (cmd is HavocCmd havocC) {
         // havoc x -> forall x :: Q
-        HavocCmd hc = (HavocCmd) cmd;
         List<VCExprVar> vars = new List<VCExprVar>();
         HashSet<VCExprVar> QFree = FreeVariableCollector.FreeTermVariables(Q);
         List<VCExpr> whereExprs = new List<VCExpr>();
-        foreach (IdentifierExpr i in hc.Vars) {
+        foreach (IdentifierExpr i in havocC.Vars) {
           VCExprVar v = (VCExprVar)translator.Translate(i);
           if (QFree.Contains(v)) {
             vars.Add(v);
@@ -1184,16 +1180,15 @@ namespace Microsoft.Boogie.InvariantInference {
             return gen.Forall(freshVars, new List<VCTrigger>(), substQ);
           }
         }
-      } else if (cmd is AssignCmd) {
+      } else if (cmd is AssignCmd assignC) {
         // x := e -> Q[x\e]
-        AssignCmd ac = (AssignCmd) cmd;
-        ac = ac.AsSimpleAssignCmd;
+        assignC = assignC.AsSimpleAssignCmd;
 
         Dictionary<VCExprVar, VCExpr> assignments = new Dictionary<VCExprVar, VCExpr>();
-        for (int i = 0; i < ac.Lhss.Count; ++i) {
-          IdentifierExpr lhs = ((SimpleAssignLhs) ac.Lhss[i]).AssignedVariable;
-          Expr rhs = ac.Rhss[i];
-          VCExprVar lhsPred = (VCExprVar) translator.Translate(lhs);
+        for (int i = 0; i < assignC.Lhss.Count; ++i) {
+          IdentifierExpr lhs = ((SimpleAssignLhs)assignC.Lhss[i]).AssignedVariable;
+          Expr rhs = assignC.Rhss[i];
+          VCExprVar lhsPred = (VCExprVar)translator.Translate(lhs);
           VCExpr rhsPred = translator.Translate(rhs);
           assignments.Add(lhsPred, rhsPred);
         }
@@ -1202,7 +1197,7 @@ namespace Microsoft.Boogie.InvariantInference {
         SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
         VCExpr substQ = substituter.Mutate(Q, subst);
 
-        return substQ; 
+        return substQ;
       } else if (cmd is CallCmd) {
         CallCmd callCmd = (CallCmd)cmd;
         StateCmd desugar = callCmd.Desugaring as StateCmd;
@@ -1217,25 +1212,22 @@ namespace Microsoft.Boogie.InvariantInference {
     }
 
     private VCExpr strongestPostcondition(Cmd cmd, VCExpr P) {
-      if (cmd is AssertCmd) {
+      if (cmd is AssertCmd assertC) {
         // assert A -> A && P
-        AssertCmd ac = (AssertCmd)cmd;
-        VCExpr A = translator.Translate(ac.Expr);
+        VCExpr A = translator.Translate(assertC.Expr);
 
         return gen.AndSimp(A, P);
-      } else if (cmd is AssumeCmd) {
+      } else if (cmd is AssumeCmd assumeC) {
         // assume A -> P && A
-        AssumeCmd ac = (AssumeCmd)cmd;
-        VCExpr A = translator.Translate(ac.Expr);
+        VCExpr A = translator.Translate(assumeC.Expr);
 
         return gen.AndSimp(P, A);
 
-      } else if (cmd is HavocCmd) {
+      } else if (cmd is HavocCmd havocC) {
         // havoc x -> exists x' :: P[x\x']
-        HavocCmd hc = (HavocCmd)cmd;
         List<VCExprVar> vars = new List<VCExprVar>();
         List<VCExpr> whereExprs = new List<VCExpr>();
-        foreach (IdentifierExpr i in hc.Vars) {
+        foreach (IdentifierExpr i in havocC.Vars) {
           vars.Add((VCExprVar)translator.Translate(i));
           if (i.Decl.TypedIdent.WhereExpr != null) {
             whereExprs.Add(translator.Translate(i.Decl.TypedIdent.WhereExpr));
@@ -1283,19 +1275,18 @@ namespace Microsoft.Boogie.InvariantInference {
           }
         }
 
-      } else if (cmd is AssignCmd) {
+      } else if (cmd is AssignCmd assignC) {
         // x := e -> exists x' :: P[x\x'] && x == e[x\x']
-        AssignCmd ac = (AssignCmd)cmd;
-        ac = ac.AsSimpleAssignCmd;
+        assignC = assignC.AsSimpleAssignCmd;
 
         List<(VCExprVar, VCExpr)> assignments = new List<(VCExprVar, VCExpr)>();
         Dictionary<VCExprVar, VCExpr> toSubst = new Dictionary<VCExprVar, VCExpr>();
         List<VCExprVar> freshVars = new List<VCExprVar>();
         HashSet<VCExprVar> PFree = FreeVariableCollector.FreeTermVariables(P);
 
-        for (int i = 0; i < ac.Lhss.Count; ++i) {
-          IdentifierExpr lhs = ((SimpleAssignLhs)ac.Lhss[i]).AssignedVariable;
-          Expr rhs = ac.Rhss[i];
+        for (int i = 0; i < assignC.Lhss.Count; ++i) {
+          IdentifierExpr lhs = ((SimpleAssignLhs)assignC.Lhss[i]).AssignedVariable;
+          Expr rhs = assignC.Rhss[i];
           VCExprVar lhsPred = (VCExprVar)translator.Translate(lhs);
           VCExpr rhsPred = translator.Translate(rhs);
           PFree.Union(FreeVariableCollector.FreeTermVariables(rhsPred));
@@ -1336,9 +1327,8 @@ namespace Microsoft.Boogie.InvariantInference {
           }
         }
 
-      } else if (cmd is CallCmd) {
-        CallCmd callCmd = (CallCmd)cmd;
-        StateCmd desugar = callCmd.Desugaring as StateCmd;
+      } else if (cmd is CallCmd callC) {
+        StateCmd desugar = callC.Desugaring as StateCmd;
         VCExpr PCall = P;
         foreach (Cmd c in desugar.Cmds) {
           PCall = strongestPostcondition(c, PCall);
@@ -1348,7 +1338,563 @@ namespace Microsoft.Boogie.InvariantInference {
       throw new NotImplementedException("unimplemented command for SP: " + cmd.ToString());
     }
 
+    private VCExpr strongestPostconditionPassive(Cmd cmd, VCExpr P) {
+      if (cmd is AssertCmd assertC) {
+        // assert A -> A && P
+        VCExpr A = translator.Translate(assertC.Expr);
+
+        return gen.AndSimp(A, P);
+      } else if (cmd is AssumeCmd assumeC) {
+        // assume A -> P && A
+        VCExpr A = translator.Translate(assumeC.Expr);
+        return gen.AndSimp(P, A);
+
+      } else if (cmd is CallCmd callC) {
+        StateCmd desugar = callC.Desugaring as StateCmd;
+        VCExpr PCall = P;
+        foreach (Cmd c in desugar.Cmds) {
+          PCall = strongestPostcondition(c, PCall);
+        }
+        return PCall;
+      }
+      throw new NotImplementedException("unimplemented command for SP: " + cmd.ToString());
+    }
+
+    private VCExpr blockSPPassive(Block block) {
+      VCExpr P = VCExpressionGenerator.True;
+      foreach (Cmd c in block.Cmds) {
+        P = strongestPostconditionPassive(c, P);
+      }
+      return P;
+    }
+    private VCExpr setSPPassive(Block start, Block target, VCExpr P_In, IEnumerable<Block> blocks) {
+      Debug.Assert(blocks.Count() > 0);
+
+      Dictionary<Block, VCExpr> blockSPs = new Dictionary<Block, VCExpr>();
+      Queue<Block> toTry = new Queue<Block>();
+      blockSPs.Add(start, blockSPPassive(start));
+
+      foreach (Block successor in start.Exits()) {
+        if (blocks.Contains(successor)) {
+          toTry.Enqueue(successor);
+        }
+      }
+
+      if (blocks.Count() == 1) {
+        return gen.AndSimp(P_In, blockSPs[start]);
+      }
+
+      while (toTry.Count != 0) {
+        Block b = toTry.Dequeue();
+        VCExpr blockP_In = VCExpressionGenerator.False;
+        bool predecessorsDone = true;
+        if (b.Predecessors.Count == 0) {
+          blockP_In = VCExpressionGenerator.True;
+        }
+        foreach (Block predecessor in b.Predecessors) {
+          if (blocks.Contains(predecessor) && b != predecessor) {
+            if (blockSPs.ContainsKey(predecessor)) {
+              blockP_In = gen.OrSimp(blockSPs[predecessor], blockP_In);
+            } else {
+              predecessorsDone = false;
+              break;
+            }
+          }
+        }
+        if (!predecessorsDone) {
+          toTry.Enqueue(b);
+          continue;
+        }
+        if (b == target) {
+          return gen.AndSimp(P_In, blockP_In);
+        }
+
+        blockSPs.Add(b, gen.AndSimp(blockSPPassive(b), blockP_In));
+        foreach (Block successor in b.Exits()) {
+          if (blocks.Contains(successor) && !blockSPs.ContainsKey(successor) && !toTry.Contains(successor)) {
+            toTry.Enqueue(successor);
+          }
+        }
+      }
+      throw new cce.UnreachableException();
+    }
+
+    private VCExpr setWPPassive(Block start, Block target, VCExpr Q_In, IEnumerable<Block> blocks) {
+      // wlp(S, false) == !sp(true, S)
+      VCExpr wlpFalse = gen.Not(setSPPassive(target, start, VCExpressionGenerator.True, blocks));
+
+      Dictionary<Block, VCExpr> blockWPTrue = new Dictionary<Block, VCExpr>();
+      blockWPTrue.Add(start, VCExpressionGenerator.True);
+
+      Queue<Block> toTry = new Queue<Block>();
+      foreach (Block predecessor in start.Predecessors) {
+        toTry.Enqueue(predecessor);
+      }
+
+      while (toTry.Count != 0) {
+        Block b = toTry.Dequeue();
+        VCExpr blockQ_In = VCExpressionGenerator.True;
+        bool successorsDone = true;
+
+        foreach (Block successor in b.Exits()) {
+          if (blocks.Contains(successor) && b != successor) {
+            if (blockWPTrue.ContainsKey(successor)) {
+              blockQ_In = gen.AndSimp(blockWPTrue[successor], blockQ_In);
+            } else {
+              successorsDone = false;
+              break;
+            }
+          }
+        }
+
+        if (!successorsDone) {
+          toTry.Enqueue(b);
+          continue;
+        }
+
+        blockWPTrue.Add(b, blockWPPassive(b, blockQ_In));
+        if (b == target) {
+          break;
+        }
+        foreach (Block predecessor in b.Predecessors) {
+          if (blocks.Contains(predecessor) && !blockWPTrue.ContainsKey(predecessor) && !toTry.Contains(predecessor)) {
+            toTry.Enqueue(predecessor);
+          }
+        }
+      }
+
+      // wp(S + T, Q) == wp(S + T, true) && (wlp(S + T, false) || Q)
+      return gen.AndSimp(blockWPTrue[target], gen.OrSimp(wlpFalse, Q_In));
+    }
+
+    private VCExpr blockWPPassive(Block block, VCExpr Q) {
+      for (int i = block.Cmds.Count; --i >= 0;) {
+        Q = weakestPreconditionPassive(block.Cmds[i], Q);
+      }
+      return Q;
+    }
+    private VCExpr weakestPreconditionPassive(Cmd cmd, VCExpr Q) {
+      if (cmd is AssertCmd assertC) {
+        // assert E -> E && Q
+        VCExpr E = translator.Translate(assertC.Expr);
+        return gen.AndSimp(E, Q);
+
+      } else if (cmd is AssumeCmd assumeC) {
+        // assume E -> E ==> Q
+        VCExpr E = translator.Translate(assumeC.Expr);
+        return gen.ImpliesSimp(E, Q);
+
+      } else if (cmd is CallCmd callC) {
+        StateCmd desugar = callC.Desugaring as StateCmd;
+        VCExpr QCall = Q;
+        for (int i = desugar.Cmds.Count - 1; i >= 0; i--) {
+          QCall = weakestPreconditionPassive(desugar.Cmds[i], QCall);
+        }
+        return QCall;
+      }
+      throw new NotImplementedException("unimplemented command for WP: " + cmd.ToString());
+    }
+
+    private VCExpr blockCWPPassive(Block block, VCExpr Q) {
+      for (int i = block.Cmds.Count; --i >= 0;) {
+        Q = conjugateWPPassive(block.Cmds[i], Q);
+      }
+      return Q;
+    }
+    private VCExpr conjugateWPPassive(Cmd cmd, VCExpr Q) {
+      if (cmd is AssertCmd assertC) {
+        // assert E -> E ==> Q
+        VCExpr E = translator.Translate(assertC.Expr);
+
+        return gen.ImpliesSimp(E, Q);
+      } else if (cmd is AssumeCmd assumeC) {
+        // assume E -> E && Q
+        VCExpr E = translator.Translate(assumeC.Expr);
+        return gen.AndSimp(E, Q);
+
+      } else if (cmd is CallCmd callC) {
+        StateCmd desugar = callC.Desugaring as StateCmd;
+        VCExpr QCall = Q;
+        for (int i = desugar.Cmds.Count - 1; i >= 0; i--) {
+          QCall = conjugateWPPassive(desugar.Cmds[i], QCall);
+        }
+        return QCall;
+      }
+      throw new NotImplementedException("unimplemented command for CWP: " + cmd.ToString());
+    }
+
+    // this hopefully could be made less redundant in the future
+    private VCExpr setCWPPassive(Block start, Block target, VCExpr Q_In, IEnumerable<Block> blocks) {
+      // cwlp(S, true) == sp(true, S)
+      VCExpr cwlpTrue = setSPPassive(target, start, VCExpressionGenerator.True, blocks);
+
+      Dictionary<Block, VCExpr> blockCWPFalse = new Dictionary<Block, VCExpr>();
+      blockCWPFalse.Add(start, blockCWPPassive(start, VCExpressionGenerator.False));
+
+      Queue<Block> toTry = new Queue<Block>();
+      foreach (Block predecessor in start.Predecessors) {
+        toTry.Enqueue(predecessor);
+      }
+
+      while (toTry.Count != 0) {
+        Block b = toTry.Dequeue();
+        VCExpr blockQ_In = VCExpressionGenerator.False;
+        bool successorsDone = true;
+
+        foreach (Block successor in b.Exits()) {
+          if (blocks.Contains(successor)) {
+            if (blockCWPFalse.ContainsKey(successor)) {
+              blockQ_In = gen.OrSimp(blockCWPFalse[successor], blockQ_In);
+            } else {
+              successorsDone = false;
+              break;
+            }
+          }
+        }
+
+        if (!successorsDone) {
+          toTry.Enqueue(b);
+          continue;
+        }
+
+        blockCWPFalse.Add(b, blockCWPPassive(b, blockQ_In));
+        if (b == target) {
+          break;
+        }
+        foreach (Block predecessor in b.Predecessors) {
+          if (blocks.Contains(predecessor) && !blockCWPFalse.ContainsKey(predecessor) && !toTry.Contains(predecessor)) {
+            toTry.Enqueue(predecessor);
+          }
+        }
+      }
+
+      // cwp(S + T, Q) == cwp(S + T, false) || (cwlp(S + T, true) && Q)
+      return gen.OrSimp(blockCWPFalse[target], gen.AndSimp(cwlpTrue, Q_In));
+    }
+
+    private VCExpr InferLoopInvariantPassive(Passifier passifier) {
+      Block start = passifier.origToForward[passifier.start];
+
+      Block end = passifier.origToBackward[passifier.end];
+
+      Block loopHeadForward = passifier.origToForward[loopHead];
+      Block loopHeadBackward = passifier.origToBackward[loopHead];
+
+      List<Variable> variables = new List<Variable>();
+      variables.AddRange(passifier.program.GlobalVariables);
+      variables.AddRange(passifier.impl.LocVars);
+
+      VCExpr loopP = setSPPassive(start, loopHeadForward, VCExpressionGenerator.True, passifier.forwardPassive.Blocks);
+      VCExpr loopQ = setCWPPassive(end, loopHeadBackward, VCExpressionGenerator.False, passifier.backwardProgramEndReachable);
+
+      loopP = prover.EliminateQuantifiers(loopP, bvOps, newBVFunctions);
+      loopQ = prover.EliminateQuantifiers(loopQ, bvOps, newBVFunctions);
+
+      List<Dictionary<Variable, Expr>> AIncarnations = new List<Dictionary<Variable, Expr>>{ passifier.loopStartIncarnationsForward };
+      //List<Dictionary<Variable, int>> AIncarnationNumbers = new List<Dictionary<Variable, int>>();
+      //AIncarnationNumbers.Add(new Dictionary<Variable, int>(passifier.loopStartIncarnationNumberForward));
+
+      Dictionary<Variable, Expr> BIncarnations = passifier.loopStartIncarnationsBackward;
+      Dictionary<Variable, Expr> BIncarnationsConcrete = BIncarnations;
+      //Dictionary<Variable, int> BIncarnationNumbers = new Dictionary<Variable, int>(passifier.loopStartIncarnationNumberBackward);
+      //Dictionary<Variable, int> BIncarnationNumbersConcrete = BIncarnationNumbers;
+
+      List<VCExpr> A = new List<VCExpr> { loopP };
+      VCExpr B = gen.AndSimp(IncarnationMapExpr(BIncarnations), loopQ);
+      VCExpr B_0 = B;
+      VCExpr BConcrete = B;
+
+      bool Forward = CommandLineOptions.Clo.InterpolationDirection == CommandLineOptions.Direction.Forward;
+      CommandLineOptions.InterpolationDebug DebugLevel = CommandLineOptions.Clo.InterpolationDebugLevel;
+      int t = 0;
+      //int r = 0;
+      int backtracks = 0;
+      int interpolantiterations = 0;
+      int concrete = 0;
+      int iterations = 0;
+
+      passifier.LoopBodyOnly();
+
+      while (true) {
+        VCExpr ForwardReachability = AToReachability(A, AIncarnations);
+
+        iterations++;
+        VCExpr I;
+        if (interpol.CalculateInterpolant(B, ForwardReachability, Forward, out I, bvOps, newBVFunctions, functionDefs, QFAxioms)) {
+          interpolantiterations++;
+
+          I = prover.EliminateQuantifiers(I, bvOps, newBVFunctions);
+
+          if (!Forward) {
+            I = gen.NotSimp(I);
+          }
+
+          Dictionary<VCExprVar, VCExpr> toSubstStart = new Dictionary<VCExprVar, VCExpr>();
+          Dictionary<VCExprVar, VCExpr> toSubstEnd = new Dictionary<VCExprVar, VCExpr>();
+          Dictionary<VCExprVar, VCExpr> toSubstStartForward = new Dictionary<VCExprVar, VCExpr>();
+          foreach (Variable v in variables) {
+            VCExprVar vcV = translator.LookupVariable(v);
+            toSubstStart.Add(vcV, translator.Translate(passifier.loopStartIncarnationsBackward[v]));
+            toSubstEnd.Add(vcV, translator.Translate(passifier.loopEndIncarnationsBackward[v]));
+            if (Forward) {
+              toSubstStartForward.Add(vcV, translator.Translate(passifier.loopStartIncarnationsForward[v]));
+            }
+          }
+          VCExprSubstitution substStart = new VCExprSubstitution(toSubstStart, new Dictionary<TypeVariable, Type>());
+          VCExprSubstitution substEnd = new VCExprSubstitution(toSubstEnd, new Dictionary<TypeVariable, Type>());
+          SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
+          VCExpr IStart = substituter.Mutate(I, substStart);
+          VCExpr IEnd = substituter.Mutate(I, substEnd);
+          VCExpr IStartForward = I;
+          if (Forward) {
+            VCExprSubstitution substStartForward = new VCExprSubstitution(toSubstStartForward, new Dictionary<TypeVariable, Type>());
+            IStartForward = substituter.Mutate(I, substStartForward);
+          }
+
+          if (DebugLevel == CommandLineOptions.InterpolationDebug.All
+            || DebugLevel == CommandLineOptions.InterpolationDebug.SizeOnly) {
+            int size = SizeComputingVisitor.ComputeSize(I);
+            Console.WriteLine("invar candidate: " + I.ToString());
+            Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
+            Console.Out.Flush();
+          }
+
+          if (isInductivePassive(IStart, IEnd, loopHeadBackward, passifier.backwardEnd, passifier.backwardPassive.Blocks, passifier, variables)) {
+            Console.WriteLine("Done");
+            return I;
+          }
+          
+          if (iterations > 1) {
+            passifier.NextIterationForward(AIncarnations[t]);
+          }
+          AIncarnations.Add(passifier.loopEndIncarnationsForward);
+          
+          if (Forward) {
+            A.Add(setSPPassive(loopHeadForward, passifier.forwardEnd, IStartForward, passifier.forwardPassive.Blocks));
+          } else {
+            A.Add(setSPPassive(loopHeadForward, passifier.forwardEnd, VCExpressionGenerator.True, passifier.forwardPassive.Blocks));
+          }
+          t++;
+
+          if (Forward) {
+            if (iterations > 1) {
+              passifier.NextIterationBackward(BIncarnations);
+              BIncarnations = passifier.loopStartIncarnationsBackward;
+            }
+            B = gen.OrSimp(B_0, gen.AndSimp(IncarnationMapExpr(BIncarnations), setCWPPassive(passifier.backwardEnd, loopHeadBackward, B, passifier.backwardPassive.Blocks)));
+          } else {
+            B = gen.AndSimp(IncarnationMapExpr(BIncarnations), gen.OrSimp(gen.NotSimp(IStart), setCWPPassive(passifier.backwardEnd, loopHeadBackward, gen.NotSimp(IEnd), passifier.backwardPassive.Blocks)));
+          }
+        } else {
+          if ((Forward && t <= concrete) || (!Forward && B == BConcrete)) {
+            return VCExpressionGenerator.True; // fail to find invariant
+          } else {
+            backtracks++;
+            if (Forward) {
+              t = concrete;
+              for (int i = t + 1; i < A.Count; i++) {
+                A.RemoveAt(i);
+                AIncarnations.RemoveAt(i);
+              }
+              passifier.NextIterationForward(AIncarnations[t]);
+              AIncarnations.Add(passifier.loopEndIncarnationsForward);
+              t++;
+              A[t] = setSPPassive(loopHeadForward, passifier.forwardEnd, VCExpressionGenerator.True, passifier.forwardPassive.Blocks);
+            } else {
+
+              passifier.NextIterationBackward(BIncarnationsConcrete);
+              BIncarnations = passifier.loopStartIncarnationsBackward;
+              BIncarnationsConcrete = BIncarnations;
+              Console.WriteLine("concrete iteration");
+              Console.WriteLine("B_old: " + BConcrete);
+              Console.WriteLine("B_0: " + B_0);
+              B = gen.OrSimp(B_0, gen.AndSimp(IncarnationMapExpr(BIncarnations), setCWPPassive(passifier.backwardEnd, loopHeadBackward, BConcrete, passifier.backwardPassive.Blocks)));
+              Console.WriteLine("B: " + B);
+              BConcrete = B;
+            }
+            concrete++;
+          }
+        }
+      }
+    }
+
+    private VCExpr AToReachability(List<VCExpr> A, List<Dictionary<Variable, Expr>> AIncarnations) {
+      VCExpr Reachability = VCExpressionGenerator.False;
+      for (int i = A.Count - 1; i >= 0; i--) {
+        VCExpr incarnationMapping = IncarnationMapExpr(AIncarnations[i]);
+        Reachability = gen.OrSimp(incarnationMapping, Reachability);
+        Reachability = gen.AndSimp(A[i], Reachability);
+      }
+      return Reachability;
+    }
+
+    private VCExpr IncarnationMapExpr(Dictionary<Variable, Expr> incarnations) {
+      VCExpr incarnationMapping = VCExpressionGenerator.True;
+      TypecheckingContext tc = new TypecheckingContext(null);
+      foreach ((Variable v, Expr e) in incarnations) {
+        Expr mapping = Expr.Eq(new IdentifierExpr(Token.NoToken, v), e);
+        mapping.Typecheck(tc);
+        incarnationMapping = gen.AndSimp(incarnationMapping, translator.Translate(mapping));
+      }
+      return incarnationMapping;
+    }
+    private bool isInductivePassive(VCExpr I_Start, VCExpr I_End, Block loopHead, Block loopEnd, IEnumerable<Block> loopBody, Passifier p, IEnumerable<Variable> variables) {
+      VCExpr loopBodyWP = setWPPassive(loopEnd, loopHead, I_End, loopBody);
+      VCExpr imp = gen.ImpliesSimp(I_Start, loopBodyWP);
+      return satisfiable(imp);
+    }
+    /*
+    class PassiveVC {
+      public VCExpr body;
+      public VCExprVar target;
+      VCExpressionGenerator gen;
+      public PassiveVC(VCExpr body, VCExprVar target, VCExpressionGenerator gen) {
+        this.body = body;
+        this.target = target;
+        this.gen = gen;
+      }
+
+      public VCExpr toVC() {
+        return gen.ImpliesSimp(body, target);
+      }
+    }
+    private PassiveVC setSPPassive(Block start, Block target, VCExpr P_In, IEnumerable<Block> blocks) {
+      Debug.Assert(blocks.Count() > 0);
+
+      Dictionary<Block, VCExpr> blockSPs = new Dictionary<Block, VCExpr>();
+      Dictionary<Block, VCExprVar> blockVars = new Dictionary<Block, VCExprVar>();
+      foreach (Block b in blocks) {
+        VCExprVar v = gen.Variable(b.Label + "_correct", Type.Bool);
+        blockVars.Add(b, v);
+      }
+
+      Queue<Block> toTry = new Queue<Block>();
+      toTry.Enqueue(start);
+
+      while (toTry.Count != 0) {
+        Block b = toTry.Dequeue();
+        VCExpr predecessors = VCExpressionGenerator.True;
+
+        if (b.Predecessors.Count > 0) {
+          predecessors = blockVars[b.Predecessors[0]];
+          for (int i = 1; i < b.Predecessors.Count; i++) {
+            predecessors = gen.OrSimp(predecessors, blockVars[b.Predecessors[i]]);
+          }
+        }
+
+        // only find sp up to start of target block
+        if (b == target) {
+          blockSPs.Add(b, predecessors);
+        } else {
+          VCExpr SP = gen.AndSimp(predecessors, blockSPPassive(b));
+          foreach (Block successor in b.Exits()) {
+            if (blocks.Contains(successor)) {
+              toTry.Enqueue(successor);
+            }
+          }
+          blockSPs.Add(b, SP);
+        }
+
+      }
+
+      VCExpr SPOut = P_In;
+      foreach ((Block b, VCExprVar v) in blockVars) {
+        SPOut = gen.AndSimp(SPOut, gen.Eq(v, blockSPs[b]));
+      }
+      SPOut = gen.ImpliesSimp(SPOut, blockVars[target]);
+
+      return new PassiveVC(SPOut, blockVars[target], gen);
+    }
+    
+    private PassiveVC setCWPPassive(Block start, Block target, VCExpr Q_In, IEnumerable<Block> blocks) {
+      Debug.Assert(blocks.Count() > 0);
+
+      Dictionary<Block, VCExpr> blockWPs = new Dictionary<Block, VCExpr>();
+      Dictionary<Block, VCExprVar> blockVars = new Dictionary<Block, VCExprVar>();
+
+      foreach (Block b in blocks) {
+        VCExprVar v = gen.Variable(b.Label + "_canfail", Type.Bool);
+        blockVars.Add(b, v);
+      }
+
+      blockWPs.Add(start, blockCWPPassive(start, Q_In));
+      Queue<Block> toTry = new Queue<Block>();
+      foreach (Block predecessor in start.Predecessors) {
+        if (blocks.Contains(predecessor)) {
+          toTry.Enqueue(predecessor);
+        }
+      }
+
+      while (toTry.Count != 0) {
+        Block b = toTry.Dequeue();
+
+        VCExpr successors = VCExpressionGenerator.False;
+        foreach (Block successor in b.Exits()) {
+          successors = gen.OrSimp(blockVars[successor], successors);
+        }
+        VCExpr WP = blockCWPPassive(b, successors);
+
+        foreach (Block predecessor in b.Predecessors) {
+          if (blocks.Contains(predecessor)) {
+            toTry.Enqueue(predecessor);
+          }
+        }
+        blockWPs.Add(b, WP);
+      }
+
+      VCExpr WPOut = Q_In;
+      foreach ((Block b, VCExprVar v) in blockVars) {
+        WPOut = gen.AndSimp(WPOut, gen.Eq(v, blockWPs[b]));
+      }
+      WPOut = gen.ImpliesSimp(WPOut, blockVars[target]);
+
+      return new PassiveVC(WPOut, blockVars[target], gen);
+    }
+
+    private PassiveVC setWPPassive(Block start, Block target, VCExpr Q_In, IEnumerable<Block> blocks) {
+      Debug.Assert(blocks.Count() > 0);
+
+      Dictionary<Block, VCExpr> blockWPs = new Dictionary<Block, VCExpr>();
+      Dictionary<Block, VCExprVar> blockVars = new Dictionary<Block, VCExprVar>();
+
+      foreach (Block b in blocks) {
+        VCExprVar v = gen.Variable(b.Label + "_correct", Type.Bool);
+        blockVars.Add(b, v);
+      }
+
+      blockWPs.Add(start, blockWPPassive(start, Q_In));
+      Queue<Block> toTry = new Queue<Block>();
+      foreach (Block predecessor in start.Predecessors) {
+        if (blocks.Contains(predecessor)) {
+          toTry.Enqueue(predecessor);
+        }
+      }
+
+      while (toTry.Count != 0) {
+        Block b = toTry.Dequeue();
+
+        VCExpr successors = VCExpressionGenerator.False;
+        foreach (Block successor in b.Exits()) {
+          successors = gen.OrSimp(blockVars[successor], successors);
+        }
+        VCExpr WP = blockWPPassive(b, successors);
+
+        foreach (Block predecessor in b.Predecessors) {
+          if (blocks.Contains(predecessor)) {
+            toTry.Enqueue(predecessor);
+          }
+        }
+        blockWPs.Add(b, WP);
+      }
+
+      VCExpr WPOut = Q_In;
+      foreach ((Block b, VCExprVar v) in blockVars) {
+        WPOut = gen.AndSimp(WPOut, gen.Eq(v, blockWPs[b]));
+      }
+
+      return new PassiveVC(WPOut, blockVars[target], gen);
+    }
+*/
   }
-  
 }
 
