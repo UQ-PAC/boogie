@@ -3,7 +3,8 @@ from pathlib import Path
 variantDict = {}
 
 #variants = ['princessqeforward', 'princessqe2forward', 'princessqe_recforward', 'mathsatqeforward', 'mathsatqe2forward', 'mathsatqe_recforward', 'smtinterpolqeforward', 'smtinterpolqe2forward', 'smtinterpolqe_recforward']
-variants = ['princessqe', 'princessqe2', 'princessqe_rec', 'mathsatqe', 'mathsatqe2', 'mathsatqe_rec', 'smtinterpolqe', 'smtinterpolqe2', 'smtinterpolqe_rec']
+#variants = ['princessqe', 'princessqe2', 'princessqe_rec', 'mathsatqe', 'mathsatqe2', 'mathsatqe_rec', 'smtinterpolqe', 'smtinterpolqe2', 'smtinterpolqe_rec']
+variants = ['mathsatqepassive', 'princessqepassive', 'smtinterpolqepassive']
 
 for variant in variants:
   variantDict[variant] = open(variant + '.csv', 'w+')

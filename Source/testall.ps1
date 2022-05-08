@@ -1,3 +1,9 @@
 ./allvariants.ps1 benchmarks/code2inv/
 ./allvariants.ps1 benchmarks/fib/
 ./allvariants.ps1 benchmarks/zilu/
+./allvariants.ps1 benchmarks/hola/
+./allvariants.ps1 benchmarks/loop-lit/
+./allvariants.ps1 benchmarks/loop-invgen/
+./allvariants.ps1 benchmarks/loop-invariants/
+./allvariants.ps1 benchmarks/loop-industry-pattern/
+./allvariants.ps1 benchmarks/loop-new/

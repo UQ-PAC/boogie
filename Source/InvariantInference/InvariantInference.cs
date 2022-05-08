@@ -501,6 +501,8 @@ namespace Microsoft.Boogie.InvariantInference {
         loopBody.UnionWith(g.NaturalLoops(loopHead, backEdge));
       }
 
+      List<Block> ends = getEndBlocks();
+
       HashSet<Block> beforeLoop = new HashSet<Block>();
       foreach (Block p in g.Predecessors(loopHead).Except(loopBody)) {
         beforeLoop.UnionWith(g.ComputeReachability(p, false));
@@ -508,19 +510,11 @@ namespace Microsoft.Boogie.InvariantInference {
 
       if (CommandLineOptions.Clo.PassifyInterpolation) {
         // all blocks in loop but not loop body or before loop are after loop
-        HashSet<Block> afterLoop = g.Nodes.Except(loopBody.Union(beforeLoop)).ToHashSet();
-        return InferLoopInvariantPassive(new Passifier(program, impl, loopBody, beforeLoop, afterLoop, loopHead));
+        HashSet<Block> afterLoop = g.ComputeReachability(loopHead, true).Except(loopBody).ToHashSet();
+        return InferLoopInvariantPassive(new Passifier(program, impl, loopBody, beforeLoop, afterLoop, loopHead), stopWatch);
       }
-
-      HashSet<Block> after = new HashSet<Block>();
 
       Block start = impl.Blocks[0];
-      List<Block> ends = getEndBlocks();
-
-      foreach (Block b in ends) {
-        after.UnionWith(g.ComputeReachability(b, false));
-      }
-      after.ExceptWith(beforeLoop);
 
       VCExpr requires = convertRequires();
       VCExpr ensures = convertEnsures();
@@ -783,7 +777,7 @@ namespace Microsoft.Boogie.InvariantInference {
           }
         }
       }
-      Console.WriteLine("gave up on finding invariant after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
+      //Console.WriteLine("gave up on finding invariant after " + iterations + " iterations, " + " including " + concrete + " concrete steps");
       stopWatch.Stop();
       return VCExpressionGenerator.True;
     }
@@ -1075,7 +1069,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
         blockSPs.Add(currentBlock, blockSP(currentBlock, blockP_In));
         foreach (Block successor in currentBlock.Exits()) {
-          if (blocks.Contains(successor) && (!blockSPs.ContainsKey(successor) || successor == target)) {
+          if (successor == target || (blocks.Contains(successor) && (!blockSPs.ContainsKey(successor)))) {
             toTry.Enqueue(successor);
           }
         }
@@ -1411,7 +1405,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
         blockSPs.Add(b, gen.AndSimp(blockSPPassive(b), blockP_In));
         foreach (Block successor in b.Exits()) {
-          if (blocks.Contains(successor) && !blockSPs.ContainsKey(successor) && !toTry.Contains(successor)) {
+          if ((successor == target || (blocks.Contains(successor) && !blockSPs.ContainsKey(successor))) && !toTry.Contains(successor)) {
             toTry.Enqueue(successor);
           }
         }
@@ -1572,10 +1566,8 @@ namespace Microsoft.Boogie.InvariantInference {
       return gen.OrSimp(blockCWPFalse[target], gen.AndSimp(cwlpTrue, Q_In));
     }
 
-    private VCExpr InferLoopInvariantPassive(Passifier passifier) {
+    private VCExpr InferLoopInvariantPassive(Passifier passifier, Stopwatch stopwatch) {
       Block start = passifier.origToForward[passifier.start];
-
-      Block end = passifier.origToBackward[passifier.end];
 
       Block loopHeadForward = passifier.origToForward[loopHead];
       Block loopHeadBackward = passifier.origToBackward[loopHead];
@@ -1583,31 +1575,36 @@ namespace Microsoft.Boogie.InvariantInference {
       List<Variable> variables = new List<Variable>();
       variables.AddRange(passifier.program.GlobalVariables);
       variables.AddRange(passifier.impl.LocVars);
+      variables.AddRange(passifier.impl.InParams);
+      variables.AddRange(passifier.impl.OutParams);
 
       VCExpr loopP = setSPPassive(start, loopHeadForward, VCExpressionGenerator.True, passifier.forwardPassive.Blocks);
-      VCExpr loopQ = setCWPPassive(end, loopHeadBackward, VCExpressionGenerator.False, passifier.backwardProgramEndReachable);
+      VCExpr loopQ = setCWPPassive(passifier.backwardEnd, loopHeadBackward, VCExpressionGenerator.False, passifier.backwardPassive.Blocks);
 
       loopP = prover.EliminateQuantifiers(loopP, bvOps, newBVFunctions);
       loopQ = prover.EliminateQuantifiers(loopQ, bvOps, newBVFunctions);
 
-      List<Dictionary<Variable, Expr>> AIncarnations = new List<Dictionary<Variable, Expr>>{ passifier.loopStartIncarnationsForward };
+      bool Forward = CommandLineOptions.Clo.InterpolationDirection == CommandLineOptions.Direction.Forward;
+      CommandLineOptions.InterpolationDebug DebugLevel = CommandLineOptions.Clo.InterpolationDebugLevel;
+
+      if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
+        Console.WriteLine("P: " + loopP);
+        Console.WriteLine("Q: " + loopQ);
+      }
+
+      List<Dictionary<Variable, Incarnation>> AIncarnations = new List<Dictionary<Variable, Incarnation>>{ passifier.loopStartIncarnationsForward };
       //List<Dictionary<Variable, int>> AIncarnationNumbers = new List<Dictionary<Variable, int>>();
       //AIncarnationNumbers.Add(new Dictionary<Variable, int>(passifier.loopStartIncarnationNumberForward));
 
-      Dictionary<Variable, Expr> BIncarnations = passifier.loopStartIncarnationsBackward;
-      Dictionary<Variable, Expr> BIncarnationsConcrete = BIncarnations;
+      List<Dictionary<Variable, Incarnation>> BIncarnations = new List<Dictionary<Variable, Incarnation>> { passifier.loopStartIncarnationsBackward };
       //Dictionary<Variable, int> BIncarnationNumbers = new Dictionary<Variable, int>(passifier.loopStartIncarnationNumberBackward);
       //Dictionary<Variable, int> BIncarnationNumbersConcrete = BIncarnationNumbers;
 
       List<VCExpr> A = new List<VCExpr> { loopP };
-      VCExpr B = gen.AndSimp(IncarnationMapExpr(BIncarnations), loopQ);
-      VCExpr B_0 = B;
-      VCExpr BConcrete = B;
+      List<VCExpr> B = new List<VCExpr> { loopQ };
 
-      bool Forward = CommandLineOptions.Clo.InterpolationDirection == CommandLineOptions.Direction.Forward;
-      CommandLineOptions.InterpolationDebug DebugLevel = CommandLineOptions.Clo.InterpolationDebugLevel;
       int t = 0;
-      //int r = 0;
+      int r = 0;
       int backtracks = 0;
       int interpolantiterations = 0;
       int concrete = 0;
@@ -1615,29 +1612,59 @@ namespace Microsoft.Boogie.InvariantInference {
 
       passifier.LoopBodyOnly();
 
-      while (true) {
-        VCExpr ForwardReachability = AToReachability(A, AIncarnations);
+      VCExpr ForwardReachability = AToReachability(A, AIncarnations, Forward, concrete);
+      VCExpr BackwardReachability = BToReachability(B, BIncarnations);
 
+      VCExpr ForwardOrig = ForwardReachability;
+      VCExpr BackwardOrig = BackwardReachability;
+
+      if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
+        Console.WriteLine("iteration 1");
+        Console.WriteLine("A: " + A[t]);
+        Console.WriteLine("AIncarnations: " + string.Join("; ", AIncarnations[t].Select(kvp => kvp.Key + ": " + kvp.Value.ToString())));
+        Console.WriteLine("ForwardReachability: " + ForwardReachability);
+        Console.WriteLine("B: " + B[r]);
+        Console.WriteLine("BIncarnations: " + string.Join("; ", BIncarnations[r].Select(kvp => kvp.Key + ": " + kvp.Value.ToString())));
+        Console.WriteLine("BackwardReachability: " + BackwardReachability);
+        Console.Out.Flush();
+      }
+
+      while (true) {
         iterations++;
         VCExpr I;
-        if (interpol.CalculateInterpolant(B, ForwardReachability, Forward, out I, bvOps, newBVFunctions, functionDefs, QFAxioms)) {
+        if (interpol.CalculateInterpolant(BackwardReachability, ForwardReachability, Forward, out I, bvOps, newBVFunctions, functionDefs, QFAxioms)) {
           interpolantiterations++;
 
+          // this can introduce unsoundness, only necessary for princess but sometimes causes problems there
+          // better approach would be to target only quantified parts of I and apply them separately
           I = prover.EliminateQuantifiers(I, bvOps, newBVFunctions);
 
           if (!Forward) {
             I = gen.NotSimp(I);
           }
 
+          if (iterations > 1) {
+            if (!Forward) {
+              passifier.NextIterationForward();
+            } else {
+              passifier.NextIterationBackward();
+            }
+          }
+          if (iterations == 0) {
+            passifier.NextIterationBackward();
+          }
+          AIncarnations.Add(passifier.loopEndIncarnationsForward);
+          BIncarnations.Add(passifier.loopStartIncarnationsBackward);
+
           Dictionary<VCExprVar, VCExpr> toSubstStart = new Dictionary<VCExprVar, VCExpr>();
           Dictionary<VCExprVar, VCExpr> toSubstEnd = new Dictionary<VCExprVar, VCExpr>();
           Dictionary<VCExprVar, VCExpr> toSubstStartForward = new Dictionary<VCExprVar, VCExpr>();
           foreach (Variable v in variables) {
             VCExprVar vcV = translator.LookupVariable(v);
-            toSubstStart.Add(vcV, translator.Translate(passifier.loopStartIncarnationsBackward[v]));
-            toSubstEnd.Add(vcV, translator.Translate(passifier.loopEndIncarnationsBackward[v]));
+            toSubstStart.Add(vcV, translator.LookupVariable(passifier.loopStartIncarnationsBackward[v]));
+            toSubstEnd.Add(vcV, translator.LookupVariable(passifier.loopEndIncarnationsBackward[v]));
             if (Forward) {
-              toSubstStartForward.Add(vcV, translator.Translate(passifier.loopStartIncarnationsForward[v]));
+              toSubstStartForward.Add(vcV, translator.LookupVariable(passifier.loopStartIncarnationsForward[v]));
             }
           }
           VCExprSubstitution substStart = new VCExprSubstitution(toSubstStart, new Dictionary<TypeVariable, Type>());
@@ -1657,18 +1684,34 @@ namespace Microsoft.Boogie.InvariantInference {
             Console.WriteLine("invar candidate: " + I.ToString());
             Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
             Console.Out.Flush();
+
+            if (!satisfiable(gen.ImpliesSimp(I, gen.NotSimp(BackwardOrig)))) {
+              Console.WriteLine("generated invariant doesn't satisfy I ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
+              throw new Exception("generated invariant doesn't satisfy I ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
+            }
+            if (!satisfiable(gen.ImpliesSimp(ForwardOrig, I))) {
+              Console.WriteLine("generated invariant doesn't satisfy P ==> I, after " + iterations + " iterations, including " + concrete + " concrete steps");
+              Console.Out.Flush();
+              throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
+            }
           }
 
           if (isInductivePassive(IStart, IEnd, loopHeadBackward, passifier.backwardEnd, passifier.backwardPassive.Blocks, passifier, variables)) {
-            Console.WriteLine("Done");
+            stopwatch.Stop();
+            TimeSpan ts = stopwatch.Elapsed;
+
+            if (DebugLevel == CommandLineOptions.InterpolationDebug.All || DebugLevel == CommandLineOptions.InterpolationDebug.Stats) {
+              String seconds = String.Format("{0:N3}", ts.TotalSeconds);
+              // success, iterations, abstract iterations, concrete iterations, invariant size, time taken in seconds
+              Console.WriteLine("success," + iterations + "," + interpolantiterations + "," + concrete + "," + SizeComputingVisitor.ComputeSize(I) + "," + seconds);
+              Console.Out.Flush();
+            }
             return I;
           }
-          
-          if (iterations > 1) {
-            passifier.NextIterationForward(AIncarnations[t]);
-          }
-          AIncarnations.Add(passifier.loopEndIncarnationsForward);
-          
+
+
+
           if (Forward) {
             A.Add(setSPPassive(loopHeadForward, passifier.forwardEnd, IStartForward, passifier.forwardPassive.Blocks));
           } else {
@@ -1676,63 +1719,116 @@ namespace Microsoft.Boogie.InvariantInference {
           }
           t++;
 
+          ForwardReachability = AToReachability(A, AIncarnations, Forward, concrete);
+
+          B.Add(setSPPassive(loopHeadBackward, passifier.backwardEnd, VCExpressionGenerator.True, passifier.backwardPassive.Blocks));
+          r++;
+
           if (Forward) {
-            if (iterations > 1) {
-              passifier.NextIterationBackward(BIncarnations);
-              BIncarnations = passifier.loopStartIncarnationsBackward;
-            }
-            B = gen.OrSimp(B_0, gen.AndSimp(IncarnationMapExpr(BIncarnations), setCWPPassive(passifier.backwardEnd, loopHeadBackward, B, passifier.backwardPassive.Blocks)));
+            BackwardReachability = BToReachability(B, BIncarnations);
           } else {
-            B = gen.AndSimp(IncarnationMapExpr(BIncarnations), gen.OrSimp(gen.NotSimp(IStart), setCWPPassive(passifier.backwardEnd, loopHeadBackward, gen.NotSimp(IEnd), passifier.backwardPassive.Blocks)));
+            BackwardReachability = gen.AndSimp(gen.NotSimp(IEnd), gen.OrSimp(IncarnationMapExpr(passifier.loopEndIncarnationsBackward), gen.AndSimp(B[r], IncarnationMapExpr(passifier.loopStartIncarnationsBackward))));
           }
+
+          if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
+            Console.WriteLine("iteration " + (iterations + 1) + " abstract");
+            Console.WriteLine("A: " + A[t]);
+            Console.WriteLine("AIncarnations: " + string.Join("; ", AIncarnations[t].Select(kvp => kvp.Key + ": " + kvp.Value.ToString())));
+            Console.WriteLine("ForwardReachability: " + ForwardReachability);
+            Console.WriteLine("B: " + B[r]);
+            Console.WriteLine("BIncarnations: " + string.Join("; ", BIncarnations[r].Select(kvp => kvp.Key + ": " + kvp.Value.ToString())));
+            Console.WriteLine("BackwardReachability: " + BackwardReachability);
+            Console.Out.Flush();
+          }
+
+
         } else {
-          if ((Forward && t <= concrete) || (!Forward && B == BConcrete)) {
+          if ((Forward && t <= concrete) || (!Forward && r <= concrete)) {
+            stopwatch.Stop();
+            TimeSpan ts = stopwatch.Elapsed;
+            if (DebugLevel == CommandLineOptions.InterpolationDebug.All || DebugLevel == CommandLineOptions.InterpolationDebug.Stats) {
+              String seconds = String.Format("{0:N3}", ts.TotalSeconds);
+              // success, iterations, abstract iterations, concrete iterations, invariant size, time taken in seconds
+              Console.WriteLine("failure," + iterations + "," + interpolantiterations + "," + concrete + ",," + seconds);
+              Console.Out.Flush();
+            }
             return VCExpressionGenerator.True; // fail to find invariant
           } else {
             backtracks++;
             if (Forward) {
               t = concrete;
-              for (int i = t + 1; i < A.Count; i++) {
-                A.RemoveAt(i);
-                AIncarnations.RemoveAt(i);
-              }
-              passifier.NextIterationForward(AIncarnations[t]);
+              A.RemoveRange(t + 1, A.Count - (t + 1));
+              AIncarnations.RemoveRange(t + 1, AIncarnations.Count - (t + 1));
+              passifier.NextIterationForward();
               AIncarnations.Add(passifier.loopEndIncarnationsForward);
               t++;
               A[t] = setSPPassive(loopHeadForward, passifier.forwardEnd, VCExpressionGenerator.True, passifier.forwardPassive.Blocks);
+              ForwardReachability = AToReachability(A, AIncarnations, Forward, concrete);
             } else {
+              r = concrete;
+              B.RemoveRange(r + 1, B.Count - (r + 1));
+              BIncarnations.RemoveRange(r + 1, BIncarnations.Count - (r + 1));
 
-              passifier.NextIterationBackward(BIncarnationsConcrete);
-              BIncarnations = passifier.loopStartIncarnationsBackward;
-              BIncarnationsConcrete = BIncarnations;
-              Console.WriteLine("concrete iteration");
-              Console.WriteLine("B_old: " + BConcrete);
-              Console.WriteLine("B_0: " + B_0);
-              B = gen.OrSimp(B_0, gen.AndSimp(IncarnationMapExpr(BIncarnations), setCWPPassive(passifier.backwardEnd, loopHeadBackward, BConcrete, passifier.backwardPassive.Blocks)));
-              Console.WriteLine("B: " + B);
-              BConcrete = B;
+              passifier.NextIterationBackward();
+              BIncarnations.Add(passifier.loopStartIncarnationsBackward);
+              B.Add(setSPPassive(loopHeadBackward, passifier.backwardEnd, VCExpressionGenerator.True, passifier.backwardPassive.Blocks));
+              r++;
+              //Console.WriteLine("B[" + r + "]:" + B[r]);
+              BackwardReachability = BToReachability(B, BIncarnations);
+              //Console.WriteLine("BackwardReachability: " + BackwardReachability);
             }
+            if (DebugLevel == CommandLineOptions.InterpolationDebug.All) {
+              Console.WriteLine("iteration " + (iterations + 1) + " concrete");
+              Console.WriteLine("A: " + A[t]);
+              Console.WriteLine("AIncarnations: " + string.Join("; ", AIncarnations[t].Select(kvp => kvp.Key + ": " + kvp.Value.ToString())));
+              Console.WriteLine("ForwardReachability: " + ForwardReachability);
+              Console.WriteLine("B: " + B[r]);
+              Console.WriteLine("BIncarnations: " + string.Join("; ", BIncarnations[r].Select(kvp => kvp.Key + ": " + kvp.Value.ToString())));
+              Console.WriteLine("BackwardReachability: " + BackwardReachability);
+              Console.Out.Flush();
+            }
+
             concrete++;
           }
         }
       }
     }
 
-    private VCExpr AToReachability(List<VCExpr> A, List<Dictionary<Variable, Expr>> AIncarnations) {
+    private VCExpr AToReachability(List<VCExpr> A, List<Dictionary<Variable, Incarnation>> AIncarnations, bool Forward, int concrete) {
       VCExpr Reachability = VCExpressionGenerator.False;
-      for (int i = A.Count - 1; i >= 0; i--) {
+      int concreteIncarnations = A.Count - 1;
+      if (Forward) {
+        concreteIncarnations = concrete;
+      }
+      for (int i = concreteIncarnations; i >= 0; i--) {
         VCExpr incarnationMapping = IncarnationMapExpr(AIncarnations[i]);
         Reachability = gen.OrSimp(incarnationMapping, Reachability);
         Reachability = gen.AndSimp(A[i], Reachability);
       }
+      if (Forward && concreteIncarnations > A.Count - 1) {
+        for (int i = A.Count - 1; i > concrete; i--) {
+          VCExpr incarnationMapping = IncarnationMapExpr(AIncarnations[i]);
+          Reachability = gen.OrSimp(gen.AndSimp(incarnationMapping, A[i]), Reachability);
+        }
+      }
       return Reachability;
     }
 
-    private VCExpr IncarnationMapExpr(Dictionary<Variable, Expr> incarnations) {
+    private VCExpr BToReachability(List<VCExpr> B, List<Dictionary<Variable, Incarnation>> BIncarnations) {
+      VCExpr Reachability = VCExpressionGenerator.False;
+      for (int i = B.Count - 1; i >= 0; i--) {
+        VCExpr incarnationMapping = IncarnationMapExpr(BIncarnations[i]);
+        Reachability = gen.OrSimp(incarnationMapping, Reachability);
+        Reachability = gen.AndSimp(B[i], Reachability);
+      }
+      return Reachability;
+    }
+
+    private VCExpr IncarnationMapExpr(Dictionary<Variable, Incarnation> incarnations) {
       VCExpr incarnationMapping = VCExpressionGenerator.True;
       TypecheckingContext tc = new TypecheckingContext(null);
-      foreach ((Variable v, Expr e) in incarnations) {
-        Expr mapping = Expr.Eq(new IdentifierExpr(Token.NoToken, v), e);
+      foreach ((Variable v, Incarnation i) in incarnations) {
+        Expr mapping = Expr.Eq(new IdentifierExpr(Token.NoToken, v), new IdentifierExpr(Token.NoToken, i));
         mapping.Typecheck(tc);
         incarnationMapping = gen.AndSimp(incarnationMapping, translator.Translate(mapping));
       }

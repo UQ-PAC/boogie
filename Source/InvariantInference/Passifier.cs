@@ -22,14 +22,10 @@ namespace Microsoft.Boogie.InvariantInference {
     public Program program;
     public Dictionary<Variable, int> varToIncarnationForward;
     public Dictionary<Variable, int> varToIncarnationBackward;
-    public Dictionary<Variable, int> loopStartIncarnationNumberForward;
-    public Dictionary<Variable, int> loopStartIncarnationNumberBackward;
-    public Dictionary<Variable, int> loopEndIncarnationNumberForward;
-    public Dictionary<Variable, int> loopEndIncarnationNumberBackward;
-    public Dictionary<Variable, Expr> loopStartIncarnationsForward;
-    public Dictionary<Variable, Expr> loopEndIncarnationsForward;
-    public Dictionary<Variable, Expr> loopStartIncarnationsBackward;
-    public Dictionary<Variable, Expr> loopEndIncarnationsBackward; 
+    public Dictionary<Variable, Incarnation> loopStartIncarnationsForward;
+    public Dictionary<Variable, Incarnation> loopEndIncarnationsForward;
+    public Dictionary<Variable, Incarnation> loopStartIncarnationsBackward;
+    public Dictionary<Variable, Incarnation> loopEndIncarnationsBackward; 
     public Dictionary<Block, Block> origToForward;
     public Dictionary<Block, Block> origToBackward;
     public Implementation forwardPassive;
@@ -58,16 +54,21 @@ namespace Microsoft.Boogie.InvariantInference {
       // need unified back edge block too ?
       start = InsertPreCondition(impl.Blocks[0]);
       end = InsertPostCondition(impl.Blocks);
+      afterLoop.Add(end);
 
+      
       if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
         Console.WriteLine("before passifying");
         ConditionGeneration.EmitImpl(impl, false);
       }
-
+      
       // duplicate impl into two versions, forward and back
       Duplicator duplicator = new Duplicator();
       forwardPassive = duplicator.VisitImplementation(impl);
       backwardPassive = duplicator.VisitImplementation(impl);
+
+      forwardPassive.ComputePredecessorsForBlocks();
+      backwardPassive.ComputePredecessorsForBlocks();
 
       // need mapping from original impl to new impls
       origToForward = new Dictionary<Block, Block>();
@@ -82,33 +83,39 @@ namespace Microsoft.Boogie.InvariantInference {
 
       // remove all after loop blocks from forward, all before loop blocks from back
 
-      HashSet<Block> dupeBeforeLoopForward = new HashSet<Block>();
-      foreach (Block b in beforeLoop) {
-        backwardPassive.Blocks.Remove(origToBackward[b]);
-        dupeBeforeLoopForward.Add(origToForward[b]);
+      HashSet<Block> beforeLoopForward = new HashSet<Block>();
+      HashSet<Block> afterLoopForward = new HashSet<Block>();
+      foreach (Block b in impl.Blocks) {
+        if (!afterLoop.Contains(b) && !loopBody.Contains(b)) {
+          backwardPassive.Blocks.Remove(origToBackward[b]);
+        }
+        if (!beforeLoop.Contains(b) && !loopBody.Contains(b)) {
+          forwardPassive.Blocks.Remove(origToForward[b]);
+        }
+        if (afterLoop.Contains(b)) {
+          afterLoopForward.Add(origToForward[b]);
+        }
+        if (beforeLoop.Contains(b)) {
+          beforeLoopForward.Add(origToForward[b]);
+        }
       }
 
-      HashSet<Block> dupeAfterLoopForward = new HashSet<Block>();
-      foreach (Block b in afterLoop) {
-        Block clone = origToForward[b];
-        forwardPassive.Blocks.Remove(clone);
-        dupeAfterLoopForward.Add(clone);
-      }
 
       forwardEnd = new Block(Token.NoToken, "ForwardLoopEnd", new List<Cmd>(), new ReturnCmd(Token.NoToken));
       forwardPassive.Blocks.Add(forwardEnd);
 
       backwardEnd = new Block(Token.NoToken, "BackwardLoopEnd", new List<Cmd>(), new ReturnCmd(Token.NoToken));
+      origToBackward[end].TransferCmd = new GotoCmd(Token.NoToken, new List<Block> { backwardEnd });
       backwardPassive.Blocks.Add(backwardEnd);
 
       foreach (Block b in forwardPassive.Blocks) {
         if (b.TransferCmd is GotoCmd gt) {
           for (int i = 0; i < gt.labelTargets.Count; i++) {
             Block successor = gt.labelTargets[i];
-            if (dupeAfterLoopForward.Contains(successor)) {
+            if (afterLoopForward.Contains(successor)) {
               gt.labelTargets.Remove(successor);
               gt.labelNames.Remove(successor.Label);
-            } else if (origToForward[loopHead] == successor && !dupeBeforeLoopForward.Contains(b)) {
+            } else if (origToForward[loopHead] == successor && !beforeLoopForward.Contains(b)) {
               gt.labelTargets.Remove(successor);
               gt.labelNames.Remove(successor.Label);
               gt.AddTarget(forwardEnd);
@@ -156,10 +163,12 @@ namespace Microsoft.Boogie.InvariantInference {
 
       passify(forwardPassive, forwardPassive.Blocks, forwardPassive.Proc.Modifies, true);
 
+      
       if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
         Console.WriteLine("after passifying forward");
         ConditionGeneration.EmitImpl(forwardPassive, false);
       }
+      
 
       passify(backwardPassive, backwardPassive.Blocks, backwardPassive.Proc.Modifies, false);
 
@@ -167,10 +176,12 @@ namespace Microsoft.Boogie.InvariantInference {
       forwardPassive.Typecheck(tc);
       backwardPassive.Typecheck(tc);
 
+      
       if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
         Console.WriteLine("after passifying backward");
         ConditionGeneration.EmitImpl(backwardPassive, false);
       }
+      
 
       /*
       NextIterationForward();
@@ -205,31 +216,32 @@ namespace Microsoft.Boogie.InvariantInference {
           }
         }
       }
+      backwardEnd.TransferCmd = new ReturnCmd(Token.NoToken);
+      List<Incarnation> currentForwardIncarnations = new List<Incarnation>(forwardIncarnations);
+      foreach (Incarnation i in currentForwardIncarnations) {
+        if (i.incarnationNumber < loopStartIncarnationsForward[i.OriginalVariable].incarnationNumber) {
+          forwardIncarnations.Remove(i);
+        }
+      }
       backwardPassive.ComputePredecessorsForBlocks();
       forwardPassive.ComputePredecessorsForBlocks();
     }
 
+
     public void NextIterationForward() {
-      NextIterationForward(loopEndIncarnationsForward);
-    }
-
-
-    public void NextIterationForward(Dictionary<Variable, Expr> firstIncarnations) {
-
-      Dictionary<Variable, Expr> substitutions = new Dictionary<Variable, Expr>();
-      
-
-      List<Incarnation> currentIncarnations = new List<Incarnation>(forwardIncarnations);
-      foreach (Incarnation i in currentIncarnations) {
-        if (loopStartIncarnationNumberForward[i.OriginalVariable] < i.incarnationNumber) {
-          Variable iPrime = CreateIncarnation(i.OriginalVariable, true);
-          IdentifierExpr incarnationExpr = new IdentifierExpr(iPrime.tok, iPrime);
-          substitutions.Add(i, incarnationExpr);
-        } else if (loopStartIncarnationNumberForward[i.OriginalVariable] == i.incarnationNumber) {
+      Dictionary<Variable, Incarnation> updatedIncarnations = new Dictionary<Variable, Incarnation>();
+      foreach (Incarnation i in forwardIncarnations) {
+        if (i == loopStartIncarnationsForward[i.OriginalVariable]) {
           // make first variables in this loop match last variables in previous loop
-          substitutions.Add(i, firstIncarnations[i.OriginalVariable]);
+          updatedIncarnations.Add(i, loopEndIncarnationsForward[i.OriginalVariable]);
+        } else {
+          Incarnation iPrime = CreateIncarnation(i.OriginalVariable, true);
+          updatedIncarnations.Add(i, iPrime);
         }
       }
+      forwardIncarnations = updatedIncarnations.Values.ToList();
+
+      Dictionary<Variable, Expr> substitutions = incarnationsToIds(updatedIncarnations);
       Substitution substituter = Substituter.SubstitutionFromDictionary(substitutions);
 
       foreach (Block b in forwardPassive.Blocks) {
@@ -239,34 +251,41 @@ namespace Microsoft.Boogie.InvariantInference {
         }
         b.Cmds = newCmds;
       }
-      // need to update loopStartForward, loopEndForward etc. here!!!
 
+      Dictionary<Variable, Incarnation> newLoopStartIncarnationsForward = new Dictionary<Variable, Incarnation>();
+      foreach ((Variable v, Incarnation i) in loopStartIncarnationsForward) {
+        newLoopStartIncarnationsForward.Add(v, updatedIncarnations[i]);
+      }
+      loopStartIncarnationsForward = newLoopStartIncarnationsForward;
+
+      Dictionary<Variable, Incarnation> newLoopEndIncarnationsForward = new Dictionary<Variable, Incarnation>();
+      foreach ((Variable v, Incarnation i) in loopEndIncarnationsForward) {
+        newLoopEndIncarnationsForward.Add(v, updatedIncarnations[i]);
+      }
+      loopEndIncarnationsForward = newLoopEndIncarnationsForward;
+
+      
       if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
-        Console.WriteLine("after second forward iteration");
+        Console.WriteLine("next forward iteration");
         ConditionGeneration.EmitImpl(forwardPassive, false);
       }
+      
     }
 
     public void NextIterationBackward() {
-      NextIterationBackward(loopStartIncarnationsBackward);
-    }
-
-    public void NextIterationBackward(Dictionary<Variable, Expr> lastIncarnations) {
-
-      Dictionary<Variable, Expr> substitutions = new Dictionary<Variable, Expr>();
-
-      List<Incarnation> currentIncarnations = new List<Incarnation>(backwardIncarnations);
-      foreach (Incarnation i in currentIncarnations) {
-        // make last variables in this loop match first variables in previous loop
-        if (loopEndIncarnationNumberBackward[i.OriginalVariable] == i.incarnationNumber) {
-          substitutions.Add(i, lastIncarnations[i.OriginalVariable]);
-        } else if (loopStartIncarnationNumberBackward[i.OriginalVariable] <= i.incarnationNumber) {
-          Variable iPrime = CreateIncarnation(i.OriginalVariable, false);
-          IdentifierExpr incarnationExpr = new IdentifierExpr(iPrime.tok, iPrime);
-          substitutions.Add(i, incarnationExpr);
+      Dictionary<Variable, Incarnation> updatedIncarnations = new Dictionary<Variable, Incarnation>();
+      foreach (Incarnation i in backwardIncarnations) {
+        if (i == loopEndIncarnationsBackward[i.OriginalVariable]) {
+          // make last variables in this loop match first variables in previous loop
+          updatedIncarnations.Add(i, loopStartIncarnationsBackward[i.OriginalVariable]);
+        } else {
+          Incarnation iPrime = CreateIncarnation(i.OriginalVariable, false);
+          updatedIncarnations.Add(i, iPrime);
         }
       }
+      backwardIncarnations = updatedIncarnations.Values.ToList();
 
+      Dictionary<Variable, Expr> substitutions = incarnationsToIds(updatedIncarnations);
       Substitution substituter = Substituter.SubstitutionFromDictionary(substitutions);
 
       foreach (Block b in backwardPassive.Blocks) {
@@ -277,12 +296,24 @@ namespace Microsoft.Boogie.InvariantInference {
         b.Cmds = newCmds;
       }
 
-      // need to update loopStartBackward, loopEndBackward etc. here!!!
+      Dictionary<Variable, Incarnation> newLoopStartIncarnationsBackward = new Dictionary<Variable, Incarnation>();
+      foreach ((Variable v, Incarnation i) in loopStartIncarnationsBackward) {
+        newLoopStartIncarnationsBackward.Add(v, updatedIncarnations[i]);
+      }
+      loopStartIncarnationsBackward = newLoopStartIncarnationsBackward;
 
+      Dictionary<Variable, Incarnation> newLoopEndIncarnationsBackward = new Dictionary<Variable, Incarnation>();
+      foreach ((Variable v, Incarnation i) in loopEndIncarnationsBackward) {
+        newLoopEndIncarnationsBackward.Add(v, updatedIncarnations[i]);
+      }
+      loopEndIncarnationsBackward = newLoopEndIncarnationsBackward;
+
+      
       if (CommandLineOptions.Clo.InterpolationDebugLevel == CommandLineOptions.InterpolationDebug.All) {
-        Console.WriteLine("after second backward iteration");
+        Console.WriteLine("next backward iteration");
         ConditionGeneration.EmitImpl(backwardPassive, false);
       }
+      
     }
 
     private Block CreateBlockBetween(Block p, Block s) {
@@ -311,17 +342,17 @@ namespace Microsoft.Boogie.InvariantInference {
       blocks.AddRange(tweens);
     }
 
-    private Dictionary<Variable, Expr> ComputeIncarnationMap(Block b, Dictionary<Block, Dictionary<Variable, Expr>> block2Incarnation, bool Forward, Dictionary<Variable, Expr> initialMap) {
+    private Dictionary<Variable, Incarnation> ComputeIncarnationMap(Block b, Dictionary<Block, Dictionary<Variable, Incarnation>> block2Incarnation, bool Forward, Dictionary<Variable, Incarnation> initialMap) {
       if (b.Predecessors.Count == 0) {
-        return new Dictionary<Variable, Expr>(initialMap);
+        return new Dictionary<Variable, Incarnation>(initialMap);
       }
-      Dictionary<Variable, Expr> incarnationMap = null;
+      Dictionary<Variable, Incarnation> incarnationMap = null;
       HashSet<Variable> fixUpsSet = new HashSet<Variable>();
       List<Variable> fixUps = new List<Variable>();
       foreach (Block pred in b.Predecessors) {
-        Dictionary<Variable, Expr> predMap = block2Incarnation[pred];
+        Dictionary<Variable, Incarnation> predMap = block2Incarnation[pred];
         if (incarnationMap == null) {
-          incarnationMap = new Dictionary<Variable, Expr>(predMap);
+          incarnationMap = new Dictionary<Variable, Incarnation>(predMap);
           continue;
         }
 
@@ -364,15 +395,19 @@ namespace Microsoft.Boogie.InvariantInference {
       }
 
       foreach (Variable v in fixUps) {
-        Variable v_prime = CreateIncarnation(v, Forward);
-        IdentifierExpr ie = new IdentifierExpr(v_prime.tok, v_prime);
-        incarnationMap[v] = ie;
+        Incarnation v_prime = CreateIncarnation(v, Forward);
+        if (Forward) {
+          forwardIncarnations.Add(v_prime);
+        } else {
+          backwardIncarnations.Add(v_prime);
+        }
+        incarnationMap[v] = v_prime;
         foreach (Block pred in b.Predecessors) {
-          Dictionary<Variable, Expr> predMap = block2Incarnation[pred];
+          Dictionary<Variable, Incarnation> predMap = block2Incarnation[pred];
 
           Expr pred_incarnation_exp;
           if (predMap.ContainsKey(v)) {
-            pred_incarnation_exp = predMap[v];
+            pred_incarnation_exp = new IdentifierExpr(predMap[v].tok, predMap[v]);
           } else {
             pred_incarnation_exp = new IdentifierExpr(v.tok, v);
           }
@@ -475,33 +510,45 @@ namespace Microsoft.Boogie.InvariantInference {
       }
       Substitution oldFrameSubst = Substituter.SubstitutionFromDictionary(oldFrameMap);
 
-      Dictionary<Block, Dictionary<Variable, Expr>> block2Incarnation = new Dictionary<Block, Dictionary<Variable, Expr>>();
+      Dictionary<Block, Dictionary<Variable, Incarnation>> block2Incarnation = new Dictionary<Block, Dictionary<Variable, Incarnation>>();
 
-      Dictionary<Variable, Expr> initialMap = new Dictionary<Variable, Expr>();
+      Dictionary<Variable, Incarnation> initialMap = new Dictionary<Variable, Incarnation>();
 
       // create initial incarnation map consisting of all local, global variables -> incarnation 0
 
 
       foreach (Variable v in currentImpl.LocVars) {
-        Variable incarnation = CreateIncarnation(v, Forward);
-        initialMap.Add(v, new IdentifierExpr(incarnation.tok, incarnation));
+        Incarnation incarnation = CreateIncarnation(v, Forward);
+        initialMap.Add(v, incarnation);
       }
       foreach (Variable v in program.GlobalVariables) {
-        Variable incarnation = CreateIncarnation(v, Forward);
-        initialMap.Add(v, new IdentifierExpr(incarnation.tok, incarnation));
+        Incarnation incarnation = CreateIncarnation(v, Forward);
+        initialMap.Add(v, incarnation);
+      }
+      foreach (Variable v in currentImpl.InParams) {
+        Incarnation incarnation = CreateIncarnation(v, Forward);
+        initialMap.Add(v, incarnation);
+      }
+      foreach (Variable v in currentImpl.OutParams) {
+        Incarnation incarnation = CreateIncarnation(v, Forward);
+        initialMap.Add(v, incarnation);
+      }
+      if (Forward) {
+        forwardIncarnations.AddRange(initialMap.Values);
+      } else {
+        backwardIncarnations.AddRange(initialMap.Values);
       }
 
+
       foreach (Block b in sorted) {
-        Dictionary<Variable, Expr> incarnationMap = ComputeIncarnationMap(b, block2Incarnation, Forward, initialMap);
+        Dictionary<Variable, Incarnation> incarnationMap = ComputeIncarnationMap(b, block2Incarnation, Forward, initialMap);
         if (Forward) {
           if (b == origToForward[loopHead]) {
-            loopStartIncarnationsForward = new Dictionary<Variable, Expr>(incarnationMap);
-            loopStartIncarnationNumberForward = new Dictionary<Variable, int>(varToIncarnationForward);
+            loopStartIncarnationsForward = new Dictionary<Variable, Incarnation>(incarnationMap);
           }
         } else {
           if (b == origToBackward[loopHead]) {
-            loopStartIncarnationsBackward = new Dictionary<Variable, Expr>(incarnationMap);
-            loopStartIncarnationNumberBackward = new Dictionary<Variable, int>(varToIncarnationBackward);
+            loopStartIncarnationsBackward = new Dictionary<Variable, Incarnation>(incarnationMap);
           }
         }
         passifyBlock(b, incarnationMap, oldFrameSubst, Forward);
@@ -510,23 +557,17 @@ namespace Microsoft.Boogie.InvariantInference {
         }
         if (Forward) {
           if (b == forwardEnd) {
-            loopEndIncarnationsForward = new Dictionary<Variable, Expr>(incarnationMap);
-            loopEndIncarnationNumberForward = new Dictionary<Variable, int>(varToIncarnationForward);
+            loopEndIncarnationsForward = new Dictionary<Variable, Incarnation>(incarnationMap);
           }
         } else {
           if (b == backwardEnd) {
-            loopEndIncarnationsBackward = new Dictionary<Variable, Expr>(incarnationMap);
-            loopEndIncarnationNumberBackward = new Dictionary<Variable, int>(varToIncarnationBackward);
+            loopEndIncarnationsBackward = new Dictionary<Variable, Incarnation>(incarnationMap);
           }
         }
       }
-
-      if (!Forward) {
-        backwardProgramEndReachable = g.ComputeReachability(origToBackward[end], false);
-      }
     }
 
-    private void passifyBlock(Block b, Dictionary<Variable, Expr> incarnationMap, Substitution oldFrameSubst, bool Forward) {
+    private void passifyBlock(Block b, Dictionary<Variable, Incarnation> incarnationMap, Substitution oldFrameSubst, bool Forward) {
       List<Cmd> passiveCmds = new List<Cmd>();
       foreach (Cmd c in b.Cmds) {
         passifyCmd(c, incarnationMap, oldFrameSubst, passiveCmds, Forward);
@@ -534,8 +575,17 @@ namespace Microsoft.Boogie.InvariantInference {
       b.Cmds = passiveCmds;
     }
 
-    private void passifyCmd(Cmd c, Dictionary<Variable, Expr> incarnationMap, Substitution oldFrameSubst, List<Cmd> passiveCmds, bool Forward) {
-      Substitution incarnationSubst = Substituter.SubstitutionFromDictionary(incarnationMap);
+    private Dictionary<Variable, Expr> incarnationsToIds(Dictionary<Variable, Incarnation> incarnationMap) {
+      Dictionary<Variable, Expr> ids = new Dictionary<Variable, Expr>();
+      foreach (Variable v in incarnationMap.Keys) {
+        ids.Add(v, new IdentifierExpr(incarnationMap[v].tok, incarnationMap[v]));
+      }
+      return ids;
+    }
+
+    private void passifyCmd(Cmd c, Dictionary<Variable, Incarnation> incarnationMap, Substitution oldFrameSubst, List<Cmd> passiveCmds, bool Forward) {
+      Dictionary<Variable, Expr> incarnationIds = incarnationsToIds(incarnationMap);
+      Substitution incarnationSubst = Substituter.SubstitutionFromDictionary(incarnationIds);
       if (c is PredicateCmd) {
         PredicateCmd pc = (PredicateCmd) c.Clone();
         pc.Expr = Substituter.ApplyReplacingOldExprs(incarnationSubst, oldFrameSubst, pc.Expr);
@@ -545,7 +595,7 @@ namespace Microsoft.Boogie.InvariantInference {
 
         // subst all variables on rhs with current incarnations
         List<Expr> assumptions = new List<Expr>();
-        IDictionary<Variable, Expr> newIncarnationMappings = new Dictionary<Variable, Expr>();
+        IDictionary<Variable, Incarnation> newIncarnationMappings = new Dictionary<Variable, Incarnation>();
         for (int i = 0; i < assign.Lhss.Count; i++) {
           Expr rhs = assign.Rhss[i];
           Expr rhsSubst = Substituter.ApplyReplacingOldExprs(incarnationSubst, oldFrameSubst, rhs);
@@ -553,27 +603,32 @@ namespace Microsoft.Boogie.InvariantInference {
           IdentifierExpr lhsIdExpr = ((SimpleAssignLhs)assign.Lhss[i]).AssignedVariable;
           Variable lhs = lhsIdExpr.Decl;
 
-          if (rhs is IdentifierExpr ie) {
+          /*if (rhs is IdentifierExpr ie) {
             if (incarnationMap.ContainsKey(ie.Decl)) {
               newIncarnationMappings[lhs] = incarnationMap[ie.Decl];
-            } else {
-              newIncarnationMappings[lhs] = ie;
+            } else if (ie.Decl is Incarnation inc) {
+              newIncarnationMappings[lhs] = inc;
             }
-          } else {
+          } else { */
             IdentifierExpr x_prime_expr;
             if (lhs is Incarnation) {
               x_prime_expr = lhsIdExpr;
             } else {
-              Variable v = CreateIncarnation(lhs, Forward);
-              x_prime_expr = new IdentifierExpr(Token.NoToken, v);
-              newIncarnationMappings[lhs] = x_prime_expr;
+              Incarnation v = CreateIncarnation(lhs, Forward);
+              if (Forward) {
+                forwardIncarnations.Add(v);
+              } else {
+                backwardIncarnations.Add(v);
+              }
+              newIncarnationMappings[lhs] = v;
+              x_prime_expr = new IdentifierExpr(v.tok, v);
             }
 
             assumptions.Add(Expr.Eq(x_prime_expr, rhsSubst));
-          }
+          //}
         }
 
-        foreach (KeyValuePair<Variable, Expr> pair in newIncarnationMappings) {
+        foreach (KeyValuePair<Variable, Incarnation> pair in newIncarnationMappings) {
           incarnationMap[pair.Key] = pair.Value;
         }
         if (assumptions.Count > 0) {
@@ -587,10 +642,16 @@ namespace Microsoft.Boogie.InvariantInference {
       } else if (c is HavocCmd hc) {
         foreach (IdentifierExpr ie in hc.Vars) {
           Variable x = ie.Decl;
-          Variable x_prime = CreateIncarnation(x, Forward);
-          incarnationMap[x] = new IdentifierExpr(x_prime.tok, x_prime);
+          Incarnation x_prime = CreateIncarnation(x, Forward);
+          if (Forward) {
+            forwardIncarnations.Add(x_prime);
+          } else {
+            backwardIncarnations.Add(x_prime);
+          }
+          incarnationMap[x] = x_prime;
         }
-        Substitution updatedIncarnationSubst = Substituter.SubstitutionFromDictionary(incarnationMap);
+        incarnationIds = incarnationsToIds(incarnationMap);
+        Substitution updatedIncarnationSubst = Substituter.SubstitutionFromDictionary(incarnationIds);
         foreach (IdentifierExpr ie in hc.Vars) {
           Variable x = ie.Decl;
           if (x.TypedIdent.WhereExpr != null) {
@@ -735,7 +796,7 @@ namespace Microsoft.Boogie.InvariantInference {
     }
     */
 
-    private Variable CreateIncarnation(Variable x, bool Forward) {
+    private Incarnation CreateIncarnation(Variable x, bool Forward) {
       int incarnationNumber;
       if (Forward) {
         if (varToIncarnationForward.ContainsKey(x)) {
@@ -753,11 +814,6 @@ namespace Microsoft.Boogie.InvariantInference {
         incarnationNumber = varToIncarnationBackward[x];
       }
       Incarnation xPrime = new Incarnation(x, incarnationNumber, Forward);
-      if (Forward) {
-        forwardIncarnations.Add(xPrime);
-      } else {
-        backwardIncarnations.Add(xPrime);
-      }
       return xPrime;
     }
 
