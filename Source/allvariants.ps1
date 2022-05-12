@@ -5,7 +5,7 @@ function RunBoogie {
   )
   
   if ($forward) {
-    $forwardflag = " /forwardSqueeze"
+    $forwardflag = " /interpolationDirection:forward"
     $forwardout = "forward"
   } else {
     $forwardflag = ""
@@ -20,12 +20,15 @@ function RunBoogie {
     $passiveout = ""
   }
 
-  if (!(Test-Path -path ($folder + $solver + $qe + $forwardout + $passiveout + "\"))) {
-    New-Item -ItemType Directory -Force -Path ($folder + $solver + $qe + $forwardout + $passiveout + "\")
+  $benchmarkset = Split-Path -Path $folder -Leaf
+
+  $outfolder = $folder + "..\results\" + $benchmarkset + "\" + $solver + $qe + $forwardout + $passiveout + "\"
+  if (!(Test-Path -path $outfolder)) {
+    New-Item -ItemType Directory -Force -Path $outfolder
   }
 
   $boogieArgs = $forwardflag + $passiveflag + " /interpolationQE:" + $qe + " /interpolationDebug:3 /inferInterpolant:" + $solver + " " + $f.FullName
-  $outfile = $folder + $solver + $qe + $forwardout + $passiveout + "\" + ($f.Name -replace "\..+") + ".txt"
+  $outfile = $outfolder + ($f.Name -replace "\..+") + ".txt"
   if (!(Test-Path $outfile)) {
     $proc = Start-Process -FilePath "BoogieDriver/bin/Debug/net5.0/BoogieDriver.exe" -NoNewWindow -PassThru -ArgumentList $boogieArgs -RedirectStandardOutput $outfile
     $proc | Wait-Process -Timeout $timeoutSeconds -ErrorAction SilentlyContinue -ErrorVariable timeouted
@@ -67,7 +70,7 @@ $files = Get-ChildItem ($folder + "*") -File -Include "*.bpl"
 $timeoutseconds = 60
 
 foreach ($f in $files) {
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "mathsat" -passive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "smtinterpol" -passive
-  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "princess" -passive
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "mathsat" -passive -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "smtinterpol" -passive -forward
+  RunBoogie -f $f -folder $folder -timeoutSeconds $timeoutSeconds -qe "qe" -solver "princess" -passive -forward
 }

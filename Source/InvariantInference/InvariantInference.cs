@@ -1643,16 +1643,13 @@ namespace Microsoft.Boogie.InvariantInference {
             I = gen.NotSimp(I);
           }
 
-          if (iterations > 1) {
-            if (!Forward) {
-              passifier.NextIterationForward();
-            } else {
-              passifier.NextIterationBackward();
-            }
-          }
-          if (iterations == 0) {
+          if (Forward || iterations == 0) {
             passifier.NextIterationBackward();
           }
+          if (iterations > 1 && !Forward) {
+            passifier.NextIterationForward();
+          }
+
           AIncarnations.Add(passifier.loopEndIncarnationsForward);
           BIncarnations.Add(passifier.loopStartIncarnationsBackward);
 
@@ -1759,10 +1756,13 @@ namespace Microsoft.Boogie.InvariantInference {
               t = concrete;
               A.RemoveRange(t + 1, A.Count - (t + 1));
               AIncarnations.RemoveRange(t + 1, AIncarnations.Count - (t + 1));
-              passifier.NextIterationForward();
+              if (concrete > 0) {
+                passifier.NextIterationForward();
+              }
               AIncarnations.Add(passifier.loopEndIncarnationsForward);
               t++;
-              A[t] = setSPPassive(loopHeadForward, passifier.forwardEnd, VCExpressionGenerator.True, passifier.forwardPassive.Blocks);
+              concrete++;
+              A.Add(setSPPassive(loopHeadForward, passifier.forwardEnd, VCExpressionGenerator.True, passifier.forwardPassive.Blocks));
               ForwardReachability = AToReachability(A, AIncarnations, Forward, concrete);
             } else {
               r = concrete;
@@ -1773,6 +1773,7 @@ namespace Microsoft.Boogie.InvariantInference {
               BIncarnations.Add(passifier.loopStartIncarnationsBackward);
               B.Add(setSPPassive(loopHeadBackward, passifier.backwardEnd, VCExpressionGenerator.True, passifier.backwardPassive.Blocks));
               r++;
+              concrete++;
               //Console.WriteLine("B[" + r + "]:" + B[r]);
               BackwardReachability = BToReachability(B, BIncarnations);
               //Console.WriteLine("BackwardReachability: " + BackwardReachability);
@@ -1787,13 +1788,13 @@ namespace Microsoft.Boogie.InvariantInference {
               Console.WriteLine("BackwardReachability: " + BackwardReachability);
               Console.Out.Flush();
             }
-
-            concrete++;
           }
         }
       }
     }
 
+    // issue is it still does the abstract reachability for the forward concrete one? fix that
+    // also need to check if backward reachability actually works at all for forward version
     private VCExpr AToReachability(List<VCExpr> A, List<Dictionary<Variable, Incarnation>> AIncarnations, bool Forward, int concrete) {
       VCExpr Reachability = VCExpressionGenerator.False;
       int concreteIncarnations = A.Count - 1;
@@ -1805,10 +1806,10 @@ namespace Microsoft.Boogie.InvariantInference {
         Reachability = gen.OrSimp(incarnationMapping, Reachability);
         Reachability = gen.AndSimp(A[i], Reachability);
       }
-      if (Forward && concreteIncarnations > A.Count - 1) {
+      if (Forward && A.Count - 1 > concreteIncarnations) {
         for (int i = A.Count - 1; i > concrete; i--) {
           VCExpr incarnationMapping = IncarnationMapExpr(AIncarnations[i]);
-          Reachability = gen.OrSimp(gen.AndSimp(incarnationMapping, A[i]), Reachability);
+          Reachability = gen.OrSimp(gen.AndSimp(A[i], incarnationMapping), Reachability);
         }
       }
       return Reachability;

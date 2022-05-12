@@ -177,8 +177,13 @@ namespace Microsoft.Boogie.SMTLib {
         SendThisVC("(assert (! " + AStr + " :named g1))");
         SendThisVC("(assert (! " + BStr + " :named g2))");
       } else if (options.Solver == SolverKind.PRINCESS) {
-        SendThisVC("(assert " + AStr + ")");
+        if (!Forward) {
+          SendThisVC("(assert " + AStr + ")");
+        }
         SendThisVC("(assert " + BStr + ")");
+        if (Forward) {
+          SendThisVC("(assert " + AStr + ")");
+        }
       } else if (options.Solver == SolverKind.CVC5) {
         SendThisVC("(assert " + AStr + ")");
         SendThisVC("(push 1)");
