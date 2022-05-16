@@ -468,8 +468,7 @@ namespace Microsoft.Boogie.InvariantInference {
     private Block loopHead;
     private SortedDictionary<(string op, int size), Function> bvOps;
     private List<Function> newBVFunctions;
-    private bool aggressiveQE = CommandLineOptions.Clo.AggressiveQE;
-    private bool manualQE = CommandLineOptions.Clo.ManualQE;
+    private bool avoidQE = CommandLineOptions.Clo.AvoidQE;
     private Dictionary<Function, VCExpr> functionDefs;
     private List<VCExpr> QFAxioms;
 
@@ -594,7 +593,7 @@ namespace Microsoft.Boogie.InvariantInference {
         VCExpr B_rElim = B[r];
         //if (CommandLineOptions.Clo.InterpolantSolverKind != CommandLineOptions.InterpolantSolver.Princess) {
 
-        if (!aggressiveQE) {
+        if (!avoidQE) {
           B_rElim = prover.EliminateQuantifiers(B[r], bvOps, newBVFunctions);
 
           if (B[r] == B_rElim) {
@@ -704,7 +703,7 @@ namespace Microsoft.Boogie.InvariantInference {
           //if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
           //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
           // } else {
-          if (!aggressiveQE) {
+          if (!avoidQE) {
             AElim = prover.EliminateQuantifiers(AExpr, bvOps, newBVFunctions);
             if (AExpr == AElim) {
               AElim = prover.Simplify(AElim, bvOps, newBVFunctions);
@@ -754,7 +753,7 @@ namespace Microsoft.Boogie.InvariantInference {
               // if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
               //   AElim = interpol.EliminateQuantifiers(AExpr, scopeVars, bvOps, newBVFunctions);
               //  } else {
-              if (!aggressiveQE) {
+              if (!avoidQE) {
                 AElim = prover.EliminateQuantifiers(AExpr, bvOps, newBVFunctions);
                 if (AExpr == AElim) {
                   AElim = prover.Simplify(AElim, bvOps, newBVFunctions);
@@ -1168,7 +1167,7 @@ namespace Microsoft.Boogie.InvariantInference {
           SubstitutingVCExprVisitor substituter = new SubstitutingVCExprVisitor(gen);
           VCExpr substQ = substituter.Mutate(Q, subst);
 
-          if (aggressiveQE) {
+          if (avoidQE) {
             return prover.EliminateQuantifiers(gen.Forall(freshVars, new List<VCTrigger>(), substQ), bvOps, newBVFunctions);
           } else {
             return gen.Forall(freshVars, new List<VCTrigger>(), substQ);
@@ -1252,7 +1251,7 @@ namespace Microsoft.Boogie.InvariantInference {
           VCExpr substP = substituter.Mutate(P, subst);
 
           //return substP;
-          if (!manualQE) {
+          if (!avoidQE) {
             substP = gen.Exists(freshVars, new List<VCTrigger>(), substP);
           }
 
@@ -1262,11 +1261,8 @@ namespace Microsoft.Boogie.InvariantInference {
             }
           }
 
-          if (aggressiveQE) {
-            return prover.EliminateQuantifiers(substP, bvOps, newBVFunctions);
-          } else {
-            return substP;
-          }
+          return substP;
+          //return prover.EliminateQuantifiers(substP, bvOps, newBVFunctions);
         }
 
       } else if (cmd is AssignCmd assignC) {
@@ -1310,15 +1306,12 @@ namespace Microsoft.Boogie.InvariantInference {
             substP = gen.AndSimp(substP, gen.Eq(assign.Item1, substRhs));
           }
 
-          if (manualQE) {
+          if (avoidQE) {
             return substP;
-          }
-
-          if (aggressiveQE) {
-            return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), bvOps, newBVFunctions);
           } else {
             return gen.Exists(freshVars, new List<VCTrigger>(), substP);
           }
+          //return prover.EliminateQuantifiers(gen.Exists(freshVars, new List<VCTrigger>(), substP), bvOps, newBVFunctions);
         }
 
       } else if (cmd is CallCmd callC) {

@@ -843,9 +843,7 @@ namespace Microsoft.Boogie
 
     public bool InterpolationProfiling = false;
 
-    public bool AggressiveQE = false;
-
-    public bool ManualQE = false;
+    public bool AvoidQE = false;
 
     public bool PassifyInterpolation = false;
 
@@ -1877,8 +1875,7 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("warnNotEliminatedVars", ref WarnNotEliminatedVars) ||
               ps.CheckBooleanFlag("interpolationSimplify", ref InterpolationSimplify) ||
               ps.CheckBooleanFlag("interpolationProfiling", ref InterpolationProfiling) ||
-              ps.CheckBooleanFlag("aggressiveQE", ref AggressiveQE) ||
-              ps.CheckBooleanFlag("manualQE", ref ManualQE) ||
+              ps.CheckBooleanFlag("avoidQE", ref AvoidQE) ||
               ps.CheckBooleanFlag("passifyInterpolation", ref PassifyInterpolation)
           )
           {
