@@ -353,13 +353,15 @@ namespace Microsoft.Boogie
       Stack<VCExprLetBinding> letBindings = new Stack<VCExprLetBinding>();
       HashSet<string> letNames = new HashSet<string>();
       HashSet<string> quantNames = new HashSet<string>();
-      Dictionary<string, VCExprVar> boundVars = new Dictionary<string, VCExprVar>();
+      Dictionary<string, Stack<VCExprVar>> boundVars = new Dictionary<string, Stack<VCExprVar>>();
       todo.Push(this);
       while (todo.Count > 0) {
         SExpr next = todo.Pop();
         if (next.Name == "let") {
           foreach (SExpr def in next[0].Arguments) {
-            letNames.Add(def.Name);
+            if (!letNames.Contains(def.Name)) {
+              letNames.Add(def.Name);
+            }
           }
         }
         if (next.Name == "exists" || next.Name == "forall") {
@@ -416,8 +418,8 @@ namespace Microsoft.Boogie
             }
             // identifier
             VCExprVar boundVar;
-            if (boundVars.TryGetValue(next.Name, out boundVar)) {
-              results.Push(boundVar);
+            if (boundVars.ContainsKey(next.Name) && boundVars[next.Name].Count > 0) {
+              results.Push(boundVars[next.Name].Peek());
               continue;
             }
             Object obj;
@@ -522,7 +524,10 @@ namespace Microsoft.Boogie
             VCExpr e = results.Pop();
             VCExprVar bound = gen.Variable(next.Name, e.Type);
             letBindings.Push(gen.LetBinding(bound, e));
-            boundVars.Add(next.Name, bound);
+            if (!boundVars.ContainsKey(next.Name)) {
+              boundVars.Add(next.Name, new Stack<VCExprVar>());
+            }
+            boundVars[next.Name].Push(bound);
             continue;
           } else if (next.Name == "let") {
             List<VCExprLetBinding> bindings = new List<VCExprLetBinding>();
@@ -530,7 +535,7 @@ namespace Microsoft.Boogie
               bindings.Add(letBindings.Pop());
             }
             foreach (VCExprLetBinding binding in bindings) {
-              boundVars.Remove(binding.V.Name);
+              boundVars[binding.V.Name].Pop();
             }
             bindings.Reverse();
             results.Push(gen.Let(bindings, results.Pop()));
@@ -552,15 +557,17 @@ namespace Microsoft.Boogie
               default:
                 throw new NotImplementedException("unimplemented for conversion to VCExpr: " + next);
             }
-            boundVars.Add(next.Name, gen.Variable(next.Name, boundType));
+            if (!boundVars.ContainsKey(next.Name)) {
+              boundVars.Add(next.Name, new Stack<VCExprVar>());
+            }
+            boundVars[next.Name].Push(gen.Variable(next.Name, boundType));
             continue;
           } else if (next.Name == "exists" || next.Name == "forall") {
             List<VCExprVar> quantVars = new List<VCExprVar>();
             foreach (SExpr def in next[0].Arguments) {
               VCExprVar boundVar;
-              if (boundVars.TryGetValue(def.Name, out boundVar)) {
-                quantVars.Add(boundVar);
-                boundVars.Remove(def.Name);
+              if (boundVars.ContainsKey(def.Name) && boundVars[def.Name].Count > 0) {
+                quantVars.Add(boundVars[def.Name].Pop());
               }
             }
             VCExpr quantifier;
