@@ -1875,7 +1875,7 @@ namespace Microsoft.Boogie
               ps.CheckBooleanFlag("warnNotEliminatedVars", ref WarnNotEliminatedVars) ||
               ps.CheckBooleanFlag("interpolationSimplify", ref InterpolationSimplify) ||
               ps.CheckBooleanFlag("interpolationProfiling", ref InterpolationProfiling) ||
-              ps.CheckBooleanFlag("avoidQE", ref AvoidQE) ||
+              ps.CheckBooleanFlag("interpolationAvoidQE", ref AvoidQE) ||
               ps.CheckBooleanFlag("passifyInterpolation", ref PassifyInterpolation)
           )
           {
@@ -2370,6 +2370,7 @@ namespace Microsoft.Boogie
                 interpolants:
                    mathsat - use MathSAT SMT solver for interpolation
                    smtinterpol - use SMTInterpol SMT solver for interpolation
+                   princess - use Princess SMT solver for interpolation
   
   /interpolationQE:<tactic> 
                specify quantifier elimination tactic for Z3 to use in the
@@ -2378,14 +2379,17 @@ namespace Microsoft.Boogie
                   qe - use Z3 qe tactic (default)
                   qe2 - use Z3 qe2 tactic
                   qe_rec - use Z3 qe_rec tactic
+                  princess - use Princess for QE, requires /inferInterpolant
+                             to be set to princess too
   
   /interpolationDebug:<n>
                 0 - no debug messages about inferring loop invariants using
                     interpolation (default)
                 1 - print size of interpolant and A & B predicates after
-                    each iteration, also do extra checks for soundness
+                    each iteration
                 2 - effects of 1 but also print the A & B predicates and
                     the interpolant for each iteration
+                3 - only display statistics when inference is finished
   
   /interpolationProverLog:<file>
                 Log input for the theorem prover used for interpolation to 
@@ -2395,13 +2399,34 @@ namespace Microsoft.Boogie
                 Append (not overwrite) the specified prover log file
 
   /interpolationBVMode:<n>
-                Interpolation technique to use for bit-vectors. Possible values are:
-                0 - equality substitution + LA(Z) encoding  + bit-level interpolation
+                Interpolation technique to use for bit-vectors, only applies
+                when using MathSAT. Possible values are:
+                0 - equality substitution + LA(Z) encoding  + bit-level
+                interpolation
                 1 - LA(Z) encoding + bit-level interpolation
                 2 - bit-level interpolation only
                 3 - LA(Z) encoding + equality substitution + bit-level
                 interpolation
                 4 - equality substitution + bit-level interpolation.
+
+  /passifyInterpolation
+                Transforms programs into passive single-assignment form
+                before interpolation - may have benefits in some cases.
+                /avoidQE is not meaningful when combined with this.
+                /interpolationQE:qe should be used for best results with
+                Princess in combination with this but otherwise does not
+                matter.
+
+  /avoidQE      Avoids using external QE for existential quantification.
+                Works best with /interpolationDirection:forward
+
+  /interpolationProfiling
+                Print time taken for various operations for profiling.
+
+  /interpolationDirection:<direction>
+                backward - use backward version of inference algorithm
+                (default)
+                forward - use forward version of inference algorithm
 
   ---- Debugging and general tracing options ---------------------------------
 
