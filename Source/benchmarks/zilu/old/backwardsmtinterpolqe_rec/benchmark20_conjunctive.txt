@@ -1,3 +1,0 @@
-success,4,4,0,54,0.377
-
-Boogie program verifier finished with 1 verified, 0 errors

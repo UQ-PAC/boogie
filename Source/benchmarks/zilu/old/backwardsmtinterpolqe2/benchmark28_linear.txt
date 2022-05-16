@@ -1,3 +1,0 @@
-Prover error: <stdin>:13:409: Unsupported non-linear arithmetic
-
-error

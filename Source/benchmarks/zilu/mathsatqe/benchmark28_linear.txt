@@ -1,3 +1,0 @@
-Prover error: uncolorable NA lemma: [ (not (<= 0 j)) (not (<= 0 j)) (not (<= 0 i)) (not (<= 0 i)) (not (<= j i)) (not (<= j i)) (<= (* j j) (* i i)) ]
-
-error

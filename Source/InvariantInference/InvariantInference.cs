@@ -1637,7 +1637,9 @@ namespace Microsoft.Boogie.InvariantInference {
 
           // this can introduce unsoundness, only necessary for princess but sometimes causes problems there
           // better approach would be to target only quantified parts of I and apply them separately
-          I = prover.EliminateQuantifiers(I, bvOps, newBVFunctions);
+          if (CommandLineOptions.Clo.InterpolantSolverKind == CommandLineOptions.InterpolantSolver.Princess) {
+            I = prover.EliminateQuantifiers(I, bvOps, newBVFunctions);
+          }
 
           if (!Forward) {
             I = gen.NotSimp(I);
@@ -1681,7 +1683,7 @@ namespace Microsoft.Boogie.InvariantInference {
             Console.WriteLine("invar candidate: " + I.ToString());
             Console.WriteLine("iteration " + iterations + " has interpolant size " + size);
             Console.Out.Flush();
-
+            /*
             if (!satisfiable(gen.ImpliesSimp(I, gen.NotSimp(BackwardOrig)))) {
               Console.WriteLine("generated invariant doesn't satisfy I ==> Q, after " + iterations + " iterations, including " + concrete + " concrete steps");
               Console.Out.Flush();
@@ -1692,6 +1694,7 @@ namespace Microsoft.Boogie.InvariantInference {
               Console.Out.Flush();
               throw new Exception("generated invariant doesn't satisfy P ==> I, after " + iterations + "iterations, including " + concrete + " concrete steps");
             }
+            */
           }
 
           if (isInductivePassive(IStart, IEnd, loopHeadBackward, passifier.backwardEnd, passifier.backwardPassive.Blocks, passifier, variables)) {

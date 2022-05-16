@@ -1,3 +1,0 @@
-Prover error: can't build ie-local interpolant
-
-error
